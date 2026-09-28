@@ -77,6 +77,8 @@ docker compose -f compose.prod.yml --env-file .env.production up -d --build
 
 `migrate` runs first; web and worker start only if it succeeds. Old signing links, sessions and queued emails keep working across updates.
 
+The images take a few GB (runtime, migrate and backup together). Reclaim space from old builds now and then with `docker image prune -f && docker builder prune -f`.
+
 ## 6. Backups and restore
 
 - The `backup` service writes `stampd/stampd-<UTC time>Z.dump` to the backup bucket every day at `BACKUP_HOUR_UTC`. The dump is written to a file first and uploaded only if `pg_dump` succeeds.

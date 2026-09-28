@@ -12,3 +12,5 @@ test-results
 playwright-report
 coverage
 public/pdf.worker.min.mjs
+# Generated inside the image by `npm ci` (postinstall); a local copy may be stale.
+src/generated
