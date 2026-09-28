@@ -50,7 +50,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
           minLength={10}
           autoComplete={mode === "login" ? "current-password" : "new-password"}
         />
-        {error && <p role="alert" className="border-brutal bg-red p-3 font-bold text-white">{error}</p>}
+        {error && <p role="alert" className="border-brutal bg-red p-3 font-bold text-ink">{error}</p>}
         <Button variant="primary" type="submit" disabled={pending} className="w-full justify-center">
           {pending ? "Working..." : mode === "login" ? "Log in" : "Create account"}
         </Button>

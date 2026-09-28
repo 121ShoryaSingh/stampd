@@ -5,7 +5,7 @@ const tones = {
   yellow: "bg-yellow",
   green: "bg-green",
   pink: "bg-pink",
-  red: "bg-red text-white",
+  red: "bg-red text-ink",
   ink: "bg-ink text-paper",
   blue: "bg-blue text-white",
 } as const;

@@ -46,7 +46,7 @@ export function SendForm({ envelopeId }: { envelopeId: string }) {
         <span className="mb-1 block font-mono text-xs font-bold uppercase">Message to signers (optional)</span>
         <textarea name="message" maxLength={2000} rows={3} placeholder="Enter message to signers" className="border-brutal w-full bg-paper p-3 outline-none focus:bg-yellow" />
       </label>
-      {state.error && <p role="alert" className="border-brutal bg-red p-3 font-bold text-white">{state.error}</p>}
+      {state.error && <p role="alert" className="border-brutal bg-red p-3 font-bold text-ink">{state.error}</p>}
       <Button variant="primary" disabled={pending}>
         {pending ? "Sending..." : "Send for signature"}
       </Button>

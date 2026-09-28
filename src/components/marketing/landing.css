@@ -18,7 +18,7 @@
          transition: transform .12s cubic-bezier(.2,.8,.2,1), box-shadow .12s cubic-bezier(.2,.8,.2,1); }
   .lp .btn:hover { transform: translate(-2px,-2px); box-shadow: 6px 6px 0 var(--ink); }
   .lp .btn:active { transform: translate(4px,4px); box-shadow: 0 0 0 var(--ink); }
-  .lp .btn.red { background: var(--red); color: #fff; }
+  .lp .btn.red { background: var(--red); color: #000; }
   .lp .btn.yellow { background: var(--yellow); }
   .lp .btn .arr { transition: transform .2s; } .lp .btn:hover .arr { transform: translateX(4px); }
 

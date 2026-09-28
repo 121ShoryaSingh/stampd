@@ -65,7 +65,7 @@ export default async function EnvelopePage({ params, searchParams }: { params: P
           </>
         }
       />
-      {error && <p role="alert" className="border-brutal bg-red p-3 font-bold text-white">{error}</p>}
+      {error && <p role="alert" className="border-brutal bg-red p-3 font-bold text-ink">{error}</p>}
       {envelope.voidReason && (
         <p className="border-brutal bg-ink p-3 font-bold text-paper">Voided: {envelope.voidReason}</p>
       )}

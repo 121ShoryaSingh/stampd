@@ -47,7 +47,7 @@ function SidebarBody({ tenants, active, onNavigate }: { tenants: UserTenant[]; a
         Stampd
       </Link>
       <WorkspaceSwitcher tenants={tenants} activeId={active.tenantId} />
-      <Link href="/envelopes/new" onClick={onNavigate} className="border-brutal shadow-hard-sm press flex items-center justify-center gap-2 bg-red px-4 py-2.5 text-sm font-bold uppercase text-white">
+      <Link href="/envelopes/new" onClick={onNavigate} className="border-brutal shadow-hard-sm press flex items-center justify-center gap-2 bg-red px-4 py-2.5 text-sm font-bold uppercase text-ink">
         <Plus aria-hidden className="h-4 w-4" />
         New envelope
       </Link>

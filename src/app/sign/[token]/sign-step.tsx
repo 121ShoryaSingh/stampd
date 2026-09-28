@@ -160,7 +160,7 @@ export function SignStep({ token, view }: { token: string; view: View }) {
             Decline
           </button>
         </div>
-        {error && <p role="alert" className="border-brutal mx-auto mt-2 max-w-4xl bg-red p-2 font-bold text-white">{error}</p>}
+        {error && <p role="alert" className="border-brutal mx-auto mt-2 max-w-4xl bg-red p-2 font-bold text-ink">{error}</p>}
       </div>
 
       {pad && (

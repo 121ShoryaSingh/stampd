@@ -5,7 +5,7 @@ import { createContext, useCallback, useContext, useState, type ReactNode } from
 type Tone = "green" | "red" | "yellow";
 type Item = { id: number; message: string; tone: Tone };
 const Ctx = createContext<{ show: (message: string, tone?: Tone) => void }>({ show: () => {} });
-const TONES: Record<Tone, string> = { green: "bg-green", red: "bg-red text-white", yellow: "bg-yellow" };
+const TONES: Record<Tone, string> = { green: "bg-green", red: "bg-red text-ink", yellow: "bg-yellow" };
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<Item[]>([]);

@@ -13,7 +13,7 @@ export default function NewEnvelopePage() {
       <h1 className="font-display text-4xl">New envelope.</h1>
       <form action={action} className="mt-6 space-y-4">
         <Input label="Title" name="title" required maxLength={200} />
-        {state.error && <p role="alert" className="border-brutal bg-red p-3 font-bold text-white">{state.error}</p>}
+        {state.error && <p role="alert" className="border-brutal bg-red p-3 font-bold text-ink">{state.error}</p>}
         <Button variant="primary" disabled={pending}>
           {pending ? "Creating..." : "Create and upload PDF"}
         </Button>

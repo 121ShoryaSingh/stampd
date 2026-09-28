@@ -59,7 +59,7 @@ export function CodeStep({ token, email }: { token: string; email: string }) {
           </button>
         </form>
       )}
-      {error && <p role="alert" className="border-brutal mt-4 bg-red p-3 font-bold text-white">{error}</p>}
+      {error && <p role="alert" className="border-brutal mt-4 bg-red p-3 font-bold text-ink">{error}</p>}
     </Card>
   );
 }

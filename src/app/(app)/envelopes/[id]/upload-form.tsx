@@ -50,7 +50,7 @@ export function UploadForm({ envelopeId, hasDocument }: { envelopeId: string; ha
           data-testid="pdf-input"
         />
       </label>
-      {error && <p role="alert" className="border-brutal bg-red p-3 font-bold text-white">{error}</p>}
+      {error && <p role="alert" className="border-brutal bg-red p-3 font-bold text-ink">{error}</p>}
     </div>
   );
 }

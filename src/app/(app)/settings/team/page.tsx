@@ -15,7 +15,7 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
   return (
     <div className="max-w-5xl space-y-8">
       <PageHeader title="Team" subtitle={`${members.length} ${members.length === 1 ? "member" : "members"} in ${tenant.name}`} />
-      {error && <p role="alert" className="border-brutal bg-red p-3 font-bold text-white">{error}</p>}
+      {error && <p role="alert" className="border-brutal bg-red p-3 font-bold text-ink">{error}</p>}
       {isAdmin && (
         <Card className="rise">
           <h2 className="mb-4 flex items-center gap-2 font-display text-2xl">

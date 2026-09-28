@@ -81,7 +81,7 @@ export function RecipientsForm({ envelopeId, initial }: { envelopeId: string; in
           {busy ? "Saving..." : "Save recipients"}
         </Button>
       </div>
-      {msg.error && <p role="alert" className="border-brutal bg-red p-3 font-bold text-white">{msg.error}</p>}
+      {msg.error && <p role="alert" className="border-brutal bg-red p-3 font-bold text-ink">{msg.error}</p>}
       {msg.ok && <p role="status" className="border-brutal bg-green p-2 font-bold">{msg.ok}</p>}
     </div>
   );

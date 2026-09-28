@@ -62,6 +62,8 @@ export function FieldEditor(props: { envelopeId: string; pdfUrl: string; pageSiz
   const [ghost, setGhost] = useState<PaletteDrag | null>(null);
   const [msg, setMsg] = useState<{ ok?: string; error?: string }>({});
   const drag = useRef<FieldDrag | PaletteDrag | null>(null);
+  // Set after a palette drag, so the click that follows the drop does not toggle the tool.
+  const justDropped = useRef(false);
   const color = (rid: string) => COLORS[Math.max(0, signers.findIndex((s) => s.id === rid)) % COLORS.length];
   const sel = fields.find((f) => f.key === selected) ?? null;
   const update = (key: string, patch: Partial<EditorField>) => setFields((fs) => fs.map((f) => (f.key === key ? { ...f, ...patch } : f)));
@@ -180,7 +182,8 @@ export function FieldEditor(props: { envelopeId: string; pdfUrl: string; pageSiz
     setGuides({ page: 0, g: NO_GUIDES });
     if (!d || d.kind !== "palette") return;
     setGhost(null);
-    if (!d.moved) return setTool(tool === d.type ? null : d.type); // a click picks the tool
+    if (!d.moved) return; // a plain click is handled by onClick (also covers keyboards)
+    justDropped.current = true;
     const pageEl = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-page]") as HTMLElement | null;
     if (!pageEl) return;
     const r = pageEl.getBoundingClientRect();
@@ -223,6 +226,10 @@ export function FieldEditor(props: { envelopeId: string; pdfUrl: string; pageSiz
               type="button"
               aria-pressed={tool === k.type}
               onPointerDown={(e) => startPaletteDrag(e, k.type)}
+              onClick={() => {
+                if (justDropped.current) return void (justDropped.current = false);
+                setTool(tool === k.type ? null : k.type);
+              }}
               className={`border-brutal flex touch-none select-none items-center justify-between px-3 py-2 text-left font-bold ${tool === k.type ? "bg-ink text-paper" : "bg-paper hover:bg-yellow"}`}
             >
               <span className="flex items-center gap-2">
@@ -291,7 +298,7 @@ export function FieldEditor(props: { envelopeId: string; pdfUrl: string; pageSiz
           Save fields
         </Button>
         <p className={`font-mono text-xs font-bold ${dirty ? "text-red" : ""}`}>{dirty ? "Unsaved changes" : "All changes saved"}</p>
-        {msg.error && <p role="alert" className="border-brutal bg-red p-2 text-sm font-bold text-white">{msg.error}</p>}
+        {msg.error && <p role="alert" className="border-brutal bg-red p-2 text-sm font-bold text-ink">{msg.error}</p>}
         {msg.ok && <p role="status" className="border-brutal bg-green p-2 text-sm font-bold">{msg.ok}</p>}
       </aside>
 

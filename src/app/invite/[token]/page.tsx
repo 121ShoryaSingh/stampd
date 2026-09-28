@@ -20,7 +20,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
           </>
         ) : (
           <div className="mt-6 flex gap-3">
-            <Link href={`/signup?next=${next}`} className="border-brutal shadow-hard-sm bg-red px-5 py-3 font-bold uppercase text-white">
+            <Link href={`/signup?next=${next}`} className="border-brutal shadow-hard-sm bg-red px-5 py-3 font-bold uppercase text-ink">
               Sign up
             </Link>
             <Link href={`/login?next=${next}`} className="border-brutal shadow-hard-sm px-5 py-3 font-bold uppercase">

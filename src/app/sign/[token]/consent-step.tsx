@@ -31,7 +31,7 @@ export function ConsentStep({ token, title, message }: { token: string; title: s
       <Button variant="primary" className="mt-6 w-full justify-center" disabled={!agree} onClick={go}>
         I agree
       </Button>
-      {error && <p role="alert" className="border-brutal mt-4 bg-red p-3 font-bold text-white">{error}</p>}
+      {error && <p role="alert" className="border-brutal mt-4 bg-red p-3 font-bold text-ink">{error}</p>}
     </Card>
   );
 }

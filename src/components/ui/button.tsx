@@ -3,7 +3,7 @@ import { Loader2 } from "lucide-react";
 
 const variants = {
   default: "bg-paper text-ink",
-  primary: "bg-red text-white",
+  primary: "bg-red text-ink",
   accent: "bg-yellow text-ink",
   ghost: "bg-transparent text-ink shadow-none border-transparent hover:border-ink",
   danger: "bg-ink text-paper",

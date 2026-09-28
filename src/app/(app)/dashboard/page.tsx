@@ -27,7 +27,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         subtitle={tenant.name}
         actions={
           // The sidebar has this button on desktop; phones get it here.
-          <Link href="/envelopes/new" className="border-brutal shadow-hard-sm press flex items-center gap-2 bg-red px-4 py-2.5 text-sm font-bold uppercase text-white md:hidden">
+          <Link href="/envelopes/new" className="border-brutal shadow-hard-sm press flex items-center gap-2 bg-red px-4 py-2.5 text-sm font-bold uppercase text-ink md:hidden">
             <Plus aria-hidden className="h-4 w-4" /> New envelope
           </Link>
         }

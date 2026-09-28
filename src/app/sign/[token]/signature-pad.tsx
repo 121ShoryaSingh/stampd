@@ -114,7 +114,7 @@ export function SignaturePad({ kind, defaultName, onAdopt, onCancel }: { kind: "
           }}
           onPointerUp={() => (last.current = null)}
         />
-        {error && <p role="alert" className="border-brutal mt-3 bg-red p-2 font-bold text-white">{error}</p>}
+        {error && <p role="alert" className="border-brutal mt-3 bg-red p-2 font-bold text-ink">{error}</p>}
         <div className="mt-4 flex flex-wrap justify-end gap-2">
           <Button type="button" onClick={clear}>
             Clear

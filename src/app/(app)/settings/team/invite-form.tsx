@@ -22,7 +22,7 @@ export function InviteForm() {
       <Button variant="primary" disabled={pending}>
         {pending ? "Inviting..." : "Invite"}
       </Button>
-      {state.error && <p role="alert" className="border-brutal w-full bg-red p-3 font-bold text-white">{state.error}</p>}
+      {state.error && <p role="alert" className="border-brutal w-full bg-red p-3 font-bold text-ink">{state.error}</p>}
       {state.inviteUrl && (
         <div className="border-brutal w-full bg-green p-3">
           <p className="font-bold">Invite created. Send this link to your teammate:</p>
