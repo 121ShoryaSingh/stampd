@@ -6,6 +6,7 @@ import { PdfCanvas } from "./pdf-canvas";
 import { saveFieldsAction } from "./actions";
 import { Button } from "@/components/ui/button";
 import { clampBox, DEFAULT_FIELD_SIZE, type Box, type FieldKind } from "@/lib/fields/geometry";
+import { pruneOrphanFields } from "@/lib/fields/prune";
 
 type Recipient = { id: string; name: string; email: string; role: "signer" | "cc" };
 type EditorField = Box & { key: string; recipientId: string; type: FieldKind; page: number };
@@ -25,7 +26,8 @@ const PAGE_W = 760;
 export function FieldEditor(props: { envelopeId: string; pdfUrl: string; pageSizes: PageSize[]; recipients: Recipient[]; initial: EditorField[] }) {
   const signers = props.recipients.filter((r) => r.role === "signer");
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
-  const [fields, setFields] = useState<EditorField[]>(props.initial);
+  const [allFields, setFields] = useState<EditorField[]>(props.initial);
+  const fields = pruneOrphanFields(allFields, signers.map((s) => s.id));
   const [tool, setTool] = useState<FieldKind | null>(null);
   const [picked, setAssignee] = useState(signers[0]?.id ?? "");
   // Signers can change after load (recipients saved above), so fall back to the first one.

@@ -35,6 +35,12 @@ export function objectExists(key: string): Promise<boolean> {
   return adapter.exists(key);
 }
 
+// Size from a listing, so nothing is downloaded; null if missing.
+export async function objectSize(key: string): Promise<number | null> {
+  const hit = (await adapter.list(key)).find((o) => o.key === key);
+  return hit ? hit.size : null;
+}
+
 export async function putObject(key: string, body: Uint8Array, contentType: string): Promise<void> {
   await adapter.upload(key, body, { contentType });
 }

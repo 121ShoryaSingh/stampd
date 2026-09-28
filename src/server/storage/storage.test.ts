@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { randomUUID } from "node:crypto";
-import { presignUpload, presignGet, getObjectBytes, objectExists, putObject, deleteObject } from "./storage";
+import { presignUpload, presignGet, getObjectBytes, objectExists, objectSize, putObject, deleteObject } from "./storage";
 import { NotFoundError } from "@/server/errors";
 
 const key = () => `t/test/e/test/${randomUUID()}.pdf`;
@@ -23,6 +23,13 @@ describe("storage", () => {
     await deleteObject(k);
     expect(await objectExists(k)).toBe(false);
     await expect(deleteObject(k)).resolves.toBeUndefined();
+  });
+
+  it("reports object size without downloading, null when missing", async () => {
+    const k = key();
+    await putObject(k, new Uint8Array(1234), "application/pdf");
+    expect(await objectSize(k)).toBe(1234);
+    expect(await objectSize(key())).toBeNull();
   });
 
   it("throws NotFoundError for a missing key", async () => {

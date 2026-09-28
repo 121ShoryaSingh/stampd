@@ -3,10 +3,10 @@ import { createHash } from "node:crypto";
 import { withTenant, type Tx } from "@/server/db/context";
 import type { EnvelopeStatus, PageSize } from "@/server/db/types";
 import { appendAudit } from "@/server/audit/service";
-import { deleteObject, getObjectBytes, objectExists, presignUpload } from "@/server/storage/storage";
+import { deleteObject, getObjectBytes, objectSize, presignUpload, putObject } from "@/server/storage/storage";
 import { InvalidStateError, NotFoundError, ValidationError } from "@/server/errors";
 import { inspectPdf } from "./pdf";
-import { isUploadKeyFor, uploadKeyFor } from "./keys";
+import { documentKeyFor, isUploadKeyFor, uploadKeyFor } from "./keys";
 
 export { uploadKeyFor } from "./keys";
 export const MAX_UPLOAD_BYTES = 26_214_400;
@@ -47,18 +47,28 @@ export async function createUploadUrl(i: { tenantId: string; envelopeId: string 
 
 export async function finalizeUpload(i: { tenantId: string; userId: string; envelopeId: string; key: string; filename: string }) {
   if (!isUploadKeyFor(i.key, i.tenantId, i.envelopeId)) throw new ValidationError("This upload does not belong to this envelope");
-  if (!(await objectExists(i.key))) throw new ValidationError("The upload did not finish. Please try again.");
+  const size = await objectSize(i.key);
+  if (size === null) throw new ValidationError("The upload did not finish. Please try again.");
+  // A signed PUT cannot enforce limits, so check size before downloading and clean up on rejection.
+  if (size > MAX_UPLOAD_BYTES) {
+    await deleteObject(i.key);
+    throw new ValidationError("PDFs can be at most 25 MB");
+  }
   const bytes = await getObjectBytes(i.key);
   let info: { pageCount: number; pageSizes: PageSize[] };
   try {
     if (bytes.byteLength > MAX_UPLOAD_BYTES) throw new ValidationError("PDFs can be at most 25 MB");
     info = await inspectPdf(bytes);
   } catch (e) {
-    await deleteObject(i.key); // a signed PUT cannot enforce limits, so we clean up here
+    await deleteObject(i.key);
     throw e;
   }
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   const filename = i.filename.replace(/[^\w.\- ()]/g, "_").slice(0, 120) || "document.pdf";
+  // Store the exact verified bytes where no signed upload URL can reach, then drop the upload.
+  const docKey = documentKeyFor(i.tenantId, i.envelopeId);
+  await putObject(docKey, bytes, "application/pdf");
+  await deleteObject(i.key);
   const res = await withTenant(i.tenantId, async (tx) => {
     await lockDraft(tx, i.envelopeId);
     const old = await tx.document.findUnique({ where: { envelopeId: i.envelopeId } });
@@ -68,7 +78,7 @@ export async function finalizeUpload(i: { tenantId: string; userId: string; enve
         tenantId: i.tenantId,
         envelopeId: i.envelopeId,
         filename,
-        s3Key: i.key,
+        s3Key: docKey,
         sha256,
         pageCount: info.pageCount,
         pageSizes: info.pageSizes,
@@ -84,6 +94,9 @@ export async function finalizeUpload(i: { tenantId: string; userId: string; enve
       data: { filename, sha256, pageCount: info.pageCount },
     });
     return { documentId: doc.id, pageCount: info.pageCount, oldKey: old?.s3Key ?? null };
+  }).catch(async (e) => {
+    await deleteObject(docKey);
+    throw e;
   });
   if (res.oldKey) await deleteObject(res.oldKey);
   return { documentId: res.documentId, pageCount: res.pageCount };

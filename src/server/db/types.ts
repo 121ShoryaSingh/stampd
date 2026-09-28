@@ -7,4 +7,5 @@ export type {
   ActorType,
 } from "@/generated/prisma/enums";
 
-export type PageSize = { w: number; h: number };
+// Visible page size in PDF points; rotate is the page /Rotate in degrees.
+export type PageSize = { w: number; h: number; rotate: number };

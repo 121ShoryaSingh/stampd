@@ -41,6 +41,8 @@ export async function setRecipients(i: { tenantId: string; userId: string; envel
       });
       out.push(row);
     }
+    // CC recipients never sign, so they cannot keep fields.
+    await tx.field.deleteMany({ where: { envelopeId: i.envelopeId, recipient: { role: "cc" } } });
     await appendAudit(tx, {
       tenantId: i.tenantId,
       envelopeId: i.envelopeId,

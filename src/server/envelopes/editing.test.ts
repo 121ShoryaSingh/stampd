@@ -42,6 +42,14 @@ describe("recipients", () => {
     expect((await getEnvelope(tenantId, id)).recipients.map((r) => r.name)).toEqual(["Alice B"]);
   });
 
+  it("switching a signer to cc removes their fields", async () => {
+    const id = await draftWithPdf(1);
+    const [a, b] = await setRecipients({ tenantId, userId, envelopeId: id, recipients: [alice, bob] });
+    await saveFields({ tenantId, userId, envelopeId: id, fields: [sig(a.id), sig(b.id, { y: 0.5 })] });
+    await setRecipients({ tenantId, userId, envelopeId: id, recipients: [alice, { ...bob, role: "cc" }] });
+    expect((await getEnvelope(tenantId, id)).fields.map((f) => f.recipientId)).toEqual([a.id]);
+  });
+
   it("rejects duplicate emails (case-insensitive)", async () => {
     const id = await draftWithPdf();
     await expect(setRecipients({ tenantId, userId, envelopeId: id, recipients: [alice, { ...bob, email: "ALICE@example.com" }] })).rejects.toThrow(

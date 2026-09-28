@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { randomUUID } from "node:crypto";
 import { adminDb, insertUser } from "../../../tests/helpers/db";
-import { makePdf } from "../../../tests/helpers/pdf";
+import { makePdf, brokenPagePdf, rotatedAndCroppedPdf } from "../../../tests/helpers/pdf";
 import { createTenant } from "@/server/tenants/service";
 import { putObject, objectExists } from "@/server/storage/storage";
 import { withTenant } from "@/server/db/context";
@@ -71,11 +71,47 @@ describe("envelope drafts", () => {
   it("replaces the document when uploading again and deletes the old file", async () => {
     const { id, key } = await uploaded(1);
     await finalizeUpload({ tenantId, userId, envelopeId: id, key, filename: "a.pdf" });
+    const firstDocKey = (await getEnvelope(tenantId, id)).document!.s3Key;
     const key2 = uploadKeyFor(tenantId, id);
     await putObject(key2, await makePdf(4), "application/pdf");
     await finalizeUpload({ tenantId, userId, envelopeId: id, key: key2, filename: "b.pdf" });
     expect((await getEnvelope(tenantId, id)).document).toMatchObject({ filename: "b.pdf", pageCount: 4 });
+    expect(await objectExists(firstDocKey)).toBe(false);
+  });
+
+  it("moves the verified PDF to a server-only key and removes the upload", async () => {
+    const { id, key } = await uploaded(1);
+    await finalizeUpload({ tenantId, userId, envelopeId: id, key, filename: "a.pdf" });
+    const { document } = await getEnvelope(tenantId, id);
+    expect(document!.s3Key).toMatch(new RegExp(`^t/${tenantId}/e/${id}/doc/[0-9a-f-]{36}\\.pdf$`));
+    expect(await objectExists(document!.s3Key)).toBe(true);
     expect(await objectExists(key)).toBe(false);
+  });
+
+  it("finalizing the same upload twice keeps the document intact", async () => {
+    const { id, key } = await uploaded(1);
+    await finalizeUpload({ tenantId, userId, envelopeId: id, key, filename: "a.pdf" });
+    await expect(finalizeUpload({ tenantId, userId, envelopeId: id, key, filename: "a.pdf" })).rejects.toThrow(/did not finish/);
+    const { document } = await getEnvelope(tenantId, id);
+    expect(await objectExists(document!.s3Key)).toBe(true);
+  });
+
+  it("rejects a PDF whose page tree is broken with a clear message", async () => {
+    const { id } = await createEnvelope({ tenantId, userId, title: "Broken tree" });
+    const key = uploadKeyFor(tenantId, id);
+    await putObject(key, await brokenPagePdf(), "application/pdf");
+    await expect(finalizeUpload({ tenantId, userId, envelopeId: id, key, filename: "b.pdf" })).rejects.toThrow(/not a valid PDF/);
+  });
+
+  it("stores the visible size of rotated and cropped pages", async () => {
+    const { id } = await createEnvelope({ tenantId, userId, title: "Rotated" });
+    const key = uploadKeyFor(tenantId, id);
+    await putObject(key, await rotatedAndCroppedPdf(), "application/pdf");
+    await finalizeUpload({ tenantId, userId, envelopeId: id, key, filename: "r.pdf" });
+    expect((await getEnvelope(tenantId, id)).document!.pageSizes).toEqual([
+      { w: 792, h: 612, rotate: 90 },
+      { w: 300, h: 400, rotate: 0 },
+    ]);
   });
 
   it("rejects a file over 25 MB and deletes it", async () => {
