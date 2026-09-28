@@ -15,6 +15,9 @@ const testEnv = {
 export default defineConfig({
   testDir: "./e2e",
   timeout: 60_000,
+  // Dev server compiles routes on first hit; keep parallelism and waits realistic for that.
+  workers: 2,
+  expect: { timeout: 15_000 },
   globalSetup: "./e2e/global-setup.ts",
   use: { baseURL: `http://localhost:${PORT}`, trace: "retain-on-failure" },
   webServer: {
