@@ -11,6 +11,9 @@ describe("safeNext", () => {
     ["/\\evil.com", "/dashboard"],
     ["https://evil.com", "/dashboard"],
     ["javascript:alert(1)", "/dashboard"],
+    ["/\t/evil.com", "/dashboard"],
+    ["/\n/evil.com", "/dashboard"],
+    ["/\r\\evil.com", "/dashboard"],
   ])("safeNext(%s) -> %s", (input, expected) => {
     expect(safeNext(input)).toBe(expected);
   });
