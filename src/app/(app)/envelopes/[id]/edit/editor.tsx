@@ -126,7 +126,8 @@ export function FieldEditor(props: { envelopeId: string; pdfUrl: string; pageSiz
       const d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
       if (d) {
         e.preventDefault();
-        update(sel.key, moveBox(sel, d[0], d[1]));
+        const moved = moveBox(sel, d[0], d[1]);
+        setFields((fs) => fs.map((f) => (f.key === sel.key ? { ...f, ...moved } : f)));
       }
     };
     window.addEventListener("keydown", onKey);

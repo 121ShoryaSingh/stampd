@@ -40,8 +40,9 @@ export function SignaturePad({ kind, defaultName, onAdopt, onCancel }: { kind: "
     c.textAlign = "center";
     c.textBaseline = "middle";
     c.fillText(typed, W / 2, H / 2, W - 40);
-    setInked(typed.trim().length > 0);
   }, [mode, typed, kind]);
+  // Typed mode has ink as soon as there is a name; drawn mode once a stroke lands.
+  const ready = mode === "type" ? typed.trim().length > 0 : inked;
 
   const pos = (e: React.PointerEvent) => {
     const r = ref.current!.getBoundingClientRect();
@@ -122,7 +123,7 @@ export function SignaturePad({ kind, defaultName, onAdopt, onCancel }: { kind: "
           <Button type="button" onClick={onCancel}>
             Cancel
           </Button>
-          <Button type="button" variant="primary" disabled={!inked} onClick={() => onAdopt(ref.current!.toDataURL("image/png"))}>
+          <Button type="button" variant="primary" disabled={!ready} onClick={() => onAdopt(ref.current!.toDataURL("image/png"))}>
             {kind === "initials" ? "Adopt initials" : "Adopt signature"}
           </Button>
         </div>

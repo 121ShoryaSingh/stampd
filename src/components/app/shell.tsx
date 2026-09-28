@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { FileSignature, Menu, Plus, Users } from "lucide-react";
@@ -59,9 +59,11 @@ function SidebarBody({ tenants, active, onNavigate }: { tenants: UserTenant[]; a
 }
 
 export function AppShell(props: { tenants: UserTenant[]; active: UserTenant; user: { name: string; email: string }; children: React.ReactNode }) {
-  const [open, setOpen] = useState(false);
   const path = usePathname();
-  useEffect(() => setOpen(false), [path]);
+  // The drawer belongs to the page it was opened on, so navigating closes it.
+  const [openOn, setOpenOn] = useState<string | null>(null);
+  const open = openOn === path;
+  const setOpen = (v: boolean) => setOpenOn(v ? path : null);
 
   return (
     <ToastProvider>

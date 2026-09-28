@@ -17,7 +17,7 @@ export function StatTile({ label, value, hint, tone = "bg-paper", index = 0 }: {
     <div className={`border-brutal shadow-hard-sm rise p-4 ${tone}`} style={{ "--i": index } as React.CSSProperties}>
       <p className="font-mono text-[11px] font-bold uppercase tracking-wider">{label}</p>
       <p className="mt-1 font-display text-4xl leading-none">{value}</p>
-      {hint && <p className="mt-2 text-xs opacity-70">{hint}</p>}
+      {hint && <p className="mt-2 text-xs">{hint}</p>}
     </div>
   );
 }

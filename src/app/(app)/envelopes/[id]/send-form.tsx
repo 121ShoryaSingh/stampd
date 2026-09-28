@@ -18,6 +18,8 @@ export function SendForm({ envelopeId }: { envelopeId: string }) {
     return res;
   }, {});
   const [days, setDays] = useState(30);
+  // Fixed when the form mounts, so the calendar bounds do not move while it is open.
+  const [today] = useState(() => Date.now());
   return (
     <form action={action} className="space-y-4">
       <input type="hidden" name="envelopeId" value={envelopeId} />
@@ -25,9 +27,9 @@ export function SendForm({ envelopeId }: { envelopeId: string }) {
         <DatePicker
           label="Expires on"
           name="expiresOn"
-          defaultValue={new Date(Date.now() + 30 * DAY)}
-          minDate={new Date(Date.now() + DAY)}
-          maxDate={new Date(Date.now() + 365 * DAY)}
+          defaultValue={new Date(today + 30 * DAY)}
+          minDate={new Date(today + DAY)}
+          maxDate={new Date(today + 365 * DAY)}
           onChange={(d) => setDays(daysUntil(d))}
         />
         <input type="hidden" name="expiresInDays" value={days} />
