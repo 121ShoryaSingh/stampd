@@ -65,3 +65,15 @@ test("a text file renamed to .pdf is rejected", async ({ page }) => {
   await page.getByTestId("pdf-input").setInputFiles({ name: "notes.pdf", mimeType: "application/pdf", buffer: Buffer.from("just some text") });
   await expect(page.getByRole("alert").filter({ hasText: "not a valid PDF" })).toBeVisible();
 });
+
+test("the expiry date is picked from a calendar", async ({ page }) => {
+  await signUpWithWorkspace(page, newUser("dates"));
+  await newEnvelope(page, "Dated Deal");
+  await page.getByTestId("pdf-input").setInputFiles({ name: "d.pdf", mimeType: "application/pdf", buffer: await pdfBuffer(1) });
+  await expect(page.getByText(/1 pages/)).toBeVisible();
+  await page.getByRole("button", { name: /Expires on/ }).click();
+  const grid = page.getByRole("grid");
+  await expect(grid).toBeVisible();
+  await grid.getByRole("button", { name: /15th/ }).first().click();
+  await expect(page.getByRole("button", { name: /Expires on: .*15th/ })).toBeVisible();
+});

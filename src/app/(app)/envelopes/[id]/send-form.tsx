@@ -1,14 +1,18 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useRouter } from "next/navigation";
 import { sendAction } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DatePicker, daysUntil } from "@/components/ui/date-picker";
+
+const DAY = 86_400_000;
 
 export function SendForm({ envelopeId }: { envelopeId: string }) {
   const router = useRouter();
   const [state, action, pending] = useActionState(sendAction, {});
+  const [days, setDays] = useState(30);
   if (state.links) {
     return (
       <div className="border-brutal bg-green p-4">
@@ -39,7 +43,15 @@ export function SendForm({ envelopeId }: { envelopeId: string }) {
     <form action={action} className="space-y-4">
       <input type="hidden" name="envelopeId" value={envelopeId} />
       <div className="grid grid-cols-2 gap-4">
-        <Input label="Expires in (days)" name="expiresInDays" type="number" min={1} max={365} defaultValue={30} placeholder="Enter days" required />
+        <DatePicker
+          label="Expires on"
+          name="expiresOn"
+          defaultValue={new Date(Date.now() + 30 * DAY)}
+          minDate={new Date(Date.now() + DAY)}
+          maxDate={new Date(Date.now() + 365 * DAY)}
+          onChange={(d) => setDays(daysUntil(d))}
+        />
+        <input type="hidden" name="expiresInDays" value={days} />
         <Input label="Remind every (days, 0 = off)" name="reminderEveryDays" type="number" min={0} max={30} defaultValue={3} placeholder="Enter days" required />
       </div>
       <label className="block">

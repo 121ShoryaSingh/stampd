@@ -15,6 +15,53 @@
   --ease-snap: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
+/* shadcn/ui tokens, mapped onto the Neo-Brutalist palette. */
+:root {
+  --background: #ffffff;
+  --foreground: #000000;
+  --popover: #ffffff;
+  --popover-foreground: #000000;
+  --card: #ffffff;
+  --card-foreground: #000000;
+  --primary: #ff3d00;
+  --primary-foreground: #000000;
+  --secondary: #ffffff;
+  --secondary-foreground: #000000;
+  --muted: #f2f2f2;
+  --muted-foreground: #404040;
+  --accent: #ffe600;
+  --accent-foreground: #000000;
+  --destructive: #ff3d00;
+  --border: #000000;
+  --input: #000000;
+  --ring: #ff3d00;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+}
+
 @utility border-brutal { border: 2.5px solid var(--color-ink); }
 @utility shadow-hard { box-shadow: 6px 6px 0 var(--color-ink); }
 @utility shadow-hard-sm { box-shadow: 4px 4px 0 var(--color-ink); }
