@@ -52,7 +52,7 @@ run as two containers:
 | caddy | caddy:2 | TLS, body-size limit (25 MB), rate limits |
 
 External: S3-compatible storage (Hetzner Object Storage or Cloudflare R2),
-Resend for email, an X.509 signing certificate for the PAdES seal.
+an SMTP server for email (nodemailer; same env names as SafetyShield/Horizon), an X.509 signing certificate for the PAdES seal.
 
 Rule: heavy work (PDF stamping/sealing, email sending) never runs in `web`.
 `web` writes rows and enqueues jobs, then returns.
@@ -61,7 +61,7 @@ Rule: heavy work (PDF stamping/sealing, email sending) never runs in `web`.
 
 Next.js 15+, React 19, TypeScript strict, Tailwind CSS, Drizzle ORM +
 `postgres` driver, Better Auth, pg-boss, zod, pdf.js (viewer), pdf-lib (stamp),
-@signpdf/signpdf + @signpdf/signer-p12 (seal), React Email + Resend,
+@signpdf/signpdf + @signpdf/signer-p12 (seal), nodemailer (SMTP) with HTML-escaped templates, Mailpit for dev/tests,
 @aws-sdk/client-s3 + s3-request-presigner, GSAP (marketing pages only),
 Vitest, Testcontainers, Playwright.
 
@@ -193,7 +193,7 @@ Failure: retry 3 times with backoff; then set `last_error` and show a
 "finalization failed, retry" action to the sender.
 
 Other jobs:
-- `send-email`: render React Email template, send via Resend; retry 5 times.
+- `send-email`: render the template (all user text HTML-escaped), send over SMTP with nodemailer; retry 5 times with backoff.
 - `reminder-tick` (cron hourly): recipients in `sent|viewed` whose
   envelope has `reminder_every_days` and `last_reminded_at` older than it.
 - `expire-envelopes` (cron hourly): `sent` envelopes past `expires_at`.
@@ -203,7 +203,7 @@ Other jobs:
 Each event stores `hash = sha256(prev_hash || canonical_json(event))`,
 where `prev_hash` is the previous event's hash for the same envelope.
 Events: created, document_uploaded, fields_updated, sent, email_sent,
-email_bounced, viewed, otp_sent, otp_failed, otp_verified, consented,
+email_failed, viewed, otp_sent, otp_failed, otp_verified, consented,
 signed, declined, reminded, voided, expired, completed, sealed.
 The final hash is printed on the certificate page.
 
@@ -230,8 +230,9 @@ The final hash is printed on the certificate page.
   mapped to user-safe messages; unexpected errors logged with a request id
   and shown generically.
 - Jobs are idempotent and retried; permanent failures surface in the UI.
-- Email bounces (Resend webhook, signature-verified) mark the recipient and
-  notify the sender.
+- SMTP send failures (connection, auth, rejected recipient) are retried; after the last
+  retry the recipient is marked undeliverable and the sender sees it on the envelope.
+  Asynchronous bounces are not tracked in v1 (plain SMTP has no bounce webhook).
 
 ## 10. Testing
 
