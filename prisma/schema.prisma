@@ -1,0 +1,289 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Better Auth tables (no RLS: not tenant-scoped).
+
+model User {
+  id            String       @id
+  name          String
+  email         String       @unique
+  emailVerified Boolean      @default(false) @map("email_verified")
+  image         String?
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  sessions      Session[]
+  accounts      Account[]
+  memberships   Membership[]
+  invitations   Invitation[]
+  envelopes     Envelope[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime @map("expires_at") @db.Timestamptz
+  token     String   @unique
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String    @map("account_id")
+  providerId            String    @map("provider_id")
+  userId                String    @map("user_id")
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?   @map("access_token")
+  refreshToken          String?   @map("refresh_token")
+  idToken               String?   @map("id_token")
+  accessTokenExpiresAt  DateTime? @map("access_token_expires_at") @db.Timestamptz
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at") @db.Timestamptz
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime @map("expires_at") @db.Timestamptz
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("verification")
+}
+
+// Tenant tables (RLS on tenant_id, see migrations/*_rls).
+
+enum MembershipRole {
+  admin
+  member
+
+  @@map("membership_role")
+}
+
+model Tenant {
+  id          String       @id @default(uuid(7)) @db.Uuid
+  name        String
+  slug        String       @unique
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  memberships Membership[]
+  invitations Invitation[]
+  envelopes   Envelope[]
+
+  @@map("tenants")
+}
+
+model Membership {
+  tenantId  String         @map("tenant_id") @db.Uuid
+  userId    String         @map("user_id")
+  role      MembershipRole
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  tenant    Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([tenantId, userId])
+  @@index([userId])
+  @@map("memberships")
+}
+
+model Invitation {
+  id         String         @id @default(uuid(7)) @db.Uuid
+  tenantId   String         @map("tenant_id") @db.Uuid
+  email      String
+  role       MembershipRole
+  tokenHash  String         @unique @map("token_hash")
+  invitedBy  String         @map("invited_by")
+  expiresAt  DateTime       @map("expires_at") @db.Timestamptz
+  acceptedAt DateTime?      @map("accepted_at") @db.Timestamptz
+  createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  tenant     Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  inviter    User           @relation(fields: [invitedBy], references: [id])
+
+  @@index([tenantId, email])
+  @@map("invitations")
+}
+
+enum EnvelopeStatus {
+  draft
+  sent
+  completed
+  declined
+  voided
+  expired
+
+  @@map("envelope_status")
+}
+
+enum RecipientRole {
+  signer
+  cc
+
+  @@map("recipient_role")
+}
+
+enum RecipientStatus {
+  pending
+  sent
+  viewed
+  signed
+  declined
+
+  @@map("recipient_status")
+}
+
+enum FieldType {
+  signature
+  initials
+  date
+  text
+  checkbox
+
+  @@map("field_type")
+}
+
+enum ActorType {
+  user
+  recipient
+  system
+
+  @@map("actor_type")
+}
+
+model Envelope {
+  id                String         @id @default(uuid(7)) @db.Uuid
+  tenantId          String         @map("tenant_id") @db.Uuid
+  createdBy         String         @map("created_by")
+  title             String
+  message           String?
+  status            EnvelopeStatus @default(draft)
+  expiresAt         DateTime?      @map("expires_at") @db.Timestamptz
+  reminderEveryDays Int?           @map("reminder_every_days")
+  lastError         String?        @map("last_error")
+  sentAt            DateTime?      @map("sent_at") @db.Timestamptz
+  completedAt       DateTime?      @map("completed_at") @db.Timestamptz
+  voidedAt          DateTime?      @map("voided_at") @db.Timestamptz
+  voidReason        String?        @map("void_reason")
+  sealedS3Key       String?        @map("sealed_s3_key")
+  sealedSha256      String?        @map("sealed_sha256")
+  auditSeq          Int            @default(0) @map("audit_seq")
+  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  tenant            Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  creator           User           @relation(fields: [createdBy], references: [id])
+  document          Document?
+  recipients        Recipient[]
+  fields            Field[]
+  auditEvents       AuditEvent[]
+
+  @@index([tenantId, status, createdAt])
+  @@map("envelopes")
+}
+
+model Document {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  envelopeId String   @unique @map("envelope_id") @db.Uuid
+  filename   String
+  s3Key      String   @map("s3_key")
+  sha256     String
+  pageCount  Int      @map("page_count")
+  pageSizes  Json     @map("page_sizes")
+  sizeBytes  Int      @map("size_bytes")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  envelope   Envelope @relation(fields: [envelopeId], references: [id], onDelete: Cascade)
+  fields     Field[]
+
+  @@map("documents")
+}
+
+model Recipient {
+  id             String          @id @default(uuid(7)) @db.Uuid
+  tenantId       String          @map("tenant_id") @db.Uuid
+  envelopeId     String          @map("envelope_id") @db.Uuid
+  name           String
+  email          String
+  role           RecipientRole   @default(signer)
+  routingOrder   Int             @default(1) @map("routing_order")
+  status         RecipientStatus @default(pending)
+  tokenHash      String?         @unique @map("token_hash")
+  otpHash        String?         @map("otp_hash")
+  otpExpiresAt   DateTime?       @map("otp_expires_at") @db.Timestamptz
+  otpAttempts    Int             @default(0) @map("otp_attempts")
+  consentedAt    DateTime?       @map("consented_at") @db.Timestamptz
+  viewedAt       DateTime?       @map("viewed_at") @db.Timestamptz
+  signedAt       DateTime?       @map("signed_at") @db.Timestamptz
+  declinedAt     DateTime?       @map("declined_at") @db.Timestamptz
+  declineReason  String?         @map("decline_reason")
+  lastRemindedAt DateTime?       @map("last_reminded_at") @db.Timestamptz
+  signIp         String?         @map("sign_ip")
+  signUserAgent  String?         @map("sign_user_agent")
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  envelope       Envelope        @relation(fields: [envelopeId], references: [id], onDelete: Cascade)
+  fields         Field[]
+
+  @@unique([envelopeId, email])
+  @@map("recipients")
+}
+
+model Field {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  envelopeId     String    @map("envelope_id") @db.Uuid
+  documentId     String    @map("document_id") @db.Uuid
+  recipientId    String    @map("recipient_id") @db.Uuid
+  type           FieldType
+  page           Int
+  x              Float
+  y              Float
+  w              Float
+  h              Float
+  required       Boolean   @default(true)
+  value          String?
+  signatureS3Key String?   @map("signature_s3_key")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  envelope       Envelope  @relation(fields: [envelopeId], references: [id], onDelete: Cascade)
+  document       Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  recipient      Recipient @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([envelopeId])
+  @@map("fields")
+}
+
+model AuditEvent {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  envelopeId String    @map("envelope_id") @db.Uuid
+  seq        Int
+  actorType  ActorType @map("actor_type")
+  actorId    String?   @map("actor_id")
+  event      String
+  ip         String?
+  userAgent  String?   @map("user_agent")
+  data       Json      @default("{}")
+  createdAt  DateTime  @map("created_at") @db.Timestamptz
+  prevHash   String?   @map("prev_hash")
+  hash       String
+  envelope   Envelope  @relation(fields: [envelopeId], references: [id], onDelete: Cascade)
+
+  @@unique([envelopeId, seq])
+  @@map("audit_events")
+}

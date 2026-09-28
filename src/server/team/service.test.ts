@@ -1,5 +1,5 @@
 import { describe, it, expect, afterAll, beforeEach } from "vitest";
-import { migratorSql, insertUser } from "../../../tests/helpers/db";
+import { adminDb, insertUser } from "../../../tests/helpers/db";
 import { createTenant } from "@/server/tenants/service";
 import {
   createInvitation,
@@ -12,9 +12,9 @@ import {
   hashToken,
 } from "./service";
 
-const admin = migratorSql();
+const admin = adminDb();
 afterAll(async () => {
-  await admin.end();
+  await admin.$disconnect();
 });
 
 let owner: { id: string; email: string }, tenantId: string;
@@ -39,9 +39,9 @@ describe("invitations", () => {
 
   it("stores only a hash of the token", async () => {
     const { token, invitationId } = await createInvitation({ tenantId, actorUserId: owner.id, email: "hash@x.dev", role: "member" });
-    const [row] = await admin`select token_hash from invitations where id = ${invitationId}`;
-    expect(row.token_hash).toBe(hashToken(token));
-    expect(row.token_hash).not.toContain(token);
+    const row = await admin.invitation.findUniqueOrThrow({ where: { id: invitationId } });
+    expect(row.tokenHash).toBe(hashToken(token));
+    expect(row.tokenHash).not.toContain(token);
   });
 
   it("matches emails case-insensitively on accept", async () => {
@@ -66,7 +66,7 @@ describe("invitations", () => {
   it("rejects an expired invitation", async () => {
     const v = await insertUser(admin);
     const inv = await createInvitation({ tenantId, actorUserId: owner.id, email: v.email, role: "member" });
-    await admin`update invitations set expires_at = now() - interval '1 minute' where id = ${inv.invitationId}`;
+    await admin.invitation.update({ where: { id: inv.invitationId }, data: { expiresAt: new Date(Date.now() - 60_000) } });
     await expect(acceptInvitation({ token: inv.token, userId: v.id, userEmail: v.email })).rejects.toThrow(/invalid or has expired/);
   });
 
@@ -104,6 +104,16 @@ describe("roles and removal", () => {
   it("cannot demote or remove the last admin", async () => {
     await expect(changeRole({ tenantId, actorUserId: owner.id, targetUserId: owner.id, role: "member" })).rejects.toThrow(/last admin/);
     await expect(removeMember({ tenantId, actorUserId: owner.id, targetUserId: owner.id })).rejects.toThrow(/last admin/);
+  });
+
+  it("two admins demoting each other at once leaves one admin", async () => {
+    const other = await addMember("admin");
+    await Promise.allSettled([
+      changeRole({ tenantId, actorUserId: owner.id, targetUserId: other.id, role: "member" }),
+      changeRole({ tenantId, actorUserId: other.id, targetUserId: owner.id, role: "member" }),
+    ]);
+    const admins = (await listMembers(tenantId)).filter((m) => m.role === "admin");
+    expect(admins).toHaveLength(1);
   });
 
   it("a member can leave, but cannot remove others", async () => {

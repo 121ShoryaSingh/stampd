@@ -1,10 +1,10 @@
 import { describe, it, expect, afterAll } from "vitest";
-import { migratorSql, insertUser } from "../../../tests/helpers/db";
+import { adminDb, insertUser } from "../../../tests/helpers/db";
 import { createTenant, listUserTenants } from "./service";
 
-const admin = migratorSql();
+const admin = adminDb();
 afterAll(async () => {
-  await admin.end();
+  await admin.$disconnect();
 });
 
 describe("tenant service", () => {

@@ -1,9 +1,6 @@
 import "server-only";
-import { sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
-import { db } from "@/server/db/client";
-import { withTenant } from "@/server/db/tenant";
-import { tenants, memberships, type Role } from "@/server/db/schema";
+import { withDb } from "@/server/db/context";
 import { ValidationError } from "@/server/errors";
 import { slugify, type UserTenant } from "./pick";
 
@@ -15,16 +12,15 @@ export async function createTenant(input: { userId: string; name: string }): Pro
   const id = uuidv7();
   // Random tail of the id keeps slugs unique.
   const slug = `${slugify(name)}-${id.replace(/-/g, "").slice(-6)}`;
-  await withTenant(id, async (tx) => {
-    await tx.insert(tenants).values({ id, name, slug });
-    await tx.insert(memberships).values({ tenantId: id, userId: input.userId, role: "admin" });
-  });
+  await withDb({ tenantId: id }, (tx) =>
+    tx.tenant.create({ data: { id, name, slug, memberships: { create: { userId: input.userId, role: "admin" } } } }),
+  );
   return { id, slug };
 }
 
 export async function listUserTenants(userId: string): Promise<UserTenant[]> {
-  const rows = await db.execute<{ tenant_id: string; name: string; slug: string; role: Role }>(
-    sql`select * from user_tenants(${userId})`,
+  const rows = await withDb({ userId }, (tx) =>
+    tx.membership.findMany({ where: { userId }, include: { tenant: true }, orderBy: { tenant: { createdAt: "asc" } } }),
   );
-  return rows.map((r) => ({ tenantId: r.tenant_id, name: r.name, slug: r.slug, role: r.role }));
+  return rows.map((m) => ({ tenantId: m.tenantId, name: m.tenant.name, slug: m.tenant.slug, role: m.role }));
 }

@@ -1,4 +1,4 @@
-import type { Role } from "@/server/db/schema";
+import type { Role } from "@/server/db/types";
 
 export type UserTenant = { tenantId: string; name: string; slug: string; role: Role };
 
