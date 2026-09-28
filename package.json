@@ -21,11 +21,14 @@
     "@aws-sdk/s3-request-presigner": "^3.1141.0",
     "@better-auth/drizzle-adapter": "^1.7.6",
     "@better-auth/prisma-adapter": "^1.7.6",
+    "@gsap/react": "^2.1.2",
     "@khair/storage-adapter": "^0.1.0",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
     "better-auth": "^1.7.6",
     "dotenv": "^18.0.4",
+    "gsap": "^3.15.0",
+    "lucide-react": "^1.48.0",
     "next": "16.3.6",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^6.3.289",
@@ -37,6 +40,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
     "@testcontainers/postgresql": "^12.1.0",
