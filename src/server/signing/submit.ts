@@ -34,17 +34,10 @@ async function advanceRouting(tx: Tx, ref: SignerRef, meta: ReqMeta) {
   const signers = await tx.recipient.findMany({ where: { envelopeId: ref.envelopeId, role: "signer" } });
   const open = signers.filter((s) => s.status !== "signed");
   if (open.length === 0) {
-    const env = await tx.envelope.update({ where: { id: ref.envelopeId }, data: { status: "completed", completedAt: new Date() } });
+    // The worker now seals the PDF, then emails everyone their copy.
+    const now = new Date();
+    await tx.envelope.update({ where: { id: ref.envelopeId }, data: { status: "completed", completedAt: now, sealRunAt: now } });
     await appendAudit(tx, { ...event(ref, "completed", meta), actorType: "system", actorId: null });
-    const sender = await senderOf(tx, env);
-    await enqueueEmail(tx, {
-      tenantId: ref.tenantId,
-      envelopeId: ref.envelopeId,
-      kind: "completed",
-      toEmail: sender.email,
-      toName: sender.name,
-      data: { title: env.title, envelopeUrl: envelopeUrl(env.id) },
-    });
     return { envelopeStatus: "completed" as const, nextStepStarted: false };
   }
   const step = Math.min(...open.map((s) => s.routingOrder));

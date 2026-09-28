@@ -1,4 +1,5 @@
 import { defineConfig } from "@playwright/test";
+import { selfSignedSealP12 } from "./src/server/finalize/dev-cert";
 
 // E2E gets its own server on 3101 backed by local RustFS, so tests never write to the real R2 bucket.
 const PORT = 3101;
@@ -16,6 +17,10 @@ const testEnv = {
   SMTP_USER: "",
   SMTP_PASS: "",
   EMAIL_FROM_ADDRESS: "no-reply@stampd.test",
+  // A throwaway seal certificate for the e2e worker.
+  SEAL_P12_PATH: "",
+  SEAL_P12_BASE64: selfSignedSealP12({ commonName: "Stampd E2E Seal", password: "e2e" }).toString("base64"),
+  SEAL_P12_PASSWORD: "e2e",
 };
 
 export default defineConfig({

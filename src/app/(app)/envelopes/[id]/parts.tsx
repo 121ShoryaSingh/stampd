@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { Ban, Send } from "lucide-react";
 import { PdfCanvas } from "@/components/pdf/pdf-canvas";
@@ -74,4 +75,18 @@ export function ResendButton({ envelopeId, recipientId, email }: { envelopeId: s
       Resend
     </Button>
   );
+}
+
+// Re-renders the page every few seconds for a while, e.g. until the signed PDF is ready.
+export function AutoRefresh({ everyMs = 4000, forMs = 300_000 }: { everyMs?: number; forMs?: number }) {
+  const router = useRouter();
+  useEffect(() => {
+    const started = Date.now();
+    const t = setInterval(() => {
+      if (Date.now() - started > forMs) clearInterval(t);
+      else router.refresh();
+    }, everyMs);
+    return () => clearInterval(t);
+  }, [router, everyMs, forMs]);
+  return null;
 }

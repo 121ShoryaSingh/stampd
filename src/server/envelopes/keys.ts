@@ -15,3 +15,9 @@ export function isUploadKeyFor(key: string, tenantId: string, envelopeId: string
 export function documentKeyFor(tenantId: string, envelopeId: string): string {
   return `t/${tenantId}/e/${envelopeId}/doc/${randomUUID()}.pdf`;
 }
+
+// The last path segment doubles as the download filename, since presigned links cannot set one.
+export function sealedKeyFor(tenantId: string, envelopeId: string, title: string): string {
+  const slug = title.normalize("NFKD").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60).toLowerCase() || "document";
+  return `t/${tenantId}/e/${envelopeId}/sealed/${randomUUID()}/${slug}-signed.pdf`;
+}

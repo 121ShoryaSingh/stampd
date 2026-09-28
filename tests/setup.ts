@@ -13,3 +13,5 @@ process.env.SMTP_HOST = inject("smtpHost");
 process.env.SMTP_PORT = String(inject("smtpPort"));
 process.env.EMAIL_FROM_NAME = "Stampd Test";
 process.env.EMAIL_FROM_ADDRESS = "no-reply@stampd.test";
+process.env.SEAL_P12_BASE64 = inject("sealP12");
+process.env.SEAL_P12_PASSWORD = "test";

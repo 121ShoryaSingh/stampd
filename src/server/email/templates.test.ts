@@ -7,7 +7,8 @@ const samples: { [K in EmailKind]: EmailData[K] } = {
   reminder: { title: evil, senderName: evil, recipientName: evil, url: "https://s.test/sign/def", expiresAt: "2026-10-01T00:00:00Z" },
   otp: { title: evil, code: "123456" },
   declined: { title: evil, signerName: evil, signerEmail: "a@x.dev", reason: evil, envelopeUrl: "https://s.test/envelopes/1" },
-  completed: { title: evil, envelopeUrl: "https://s.test/envelopes/1" },
+  completed: { title: evil, envelopeUrl: "https://s.test/envelopes/1", url: "https://s3.test/signed.pdf?sig=1" },
+  signed_copy: { title: evil, senderName: evil, recipientName: evil, url: "https://s3.test/signed.pdf?sig=1" },
   expired: { title: evil, envelopeUrl: "https://s.test/envelopes/1" },
   voided: { title: evil, senderName: evil, reason: evil },
 };
@@ -37,13 +38,13 @@ describe("renderEmail", () => {
   });
 
   it("keeps subjects on one line", () => {
-    const m = renderEmail("completed", { title: "A\r\nBcc: evil@x.dev\nB", envelopeUrl: "https://s.test" });
+    const m = renderEmail("completed", { title: "A\r\nBcc: evil@x.dev\nB", envelopeUrl: "https://s.test", url: "https://s.test/d" });
     expect(m.subject).not.toMatch(/[\r\n]/);
     expect(m.subject).toBe('Completed: "A Bcc: evil@x.dev B"');
   });
 
   it("caps long subjects at 150 characters", () => {
-    expect(renderEmail("completed", { title: "x".repeat(400), envelopeUrl: "https://s.test" }).subject).toHaveLength(150);
+    expect(renderEmail("completed", { title: "x".repeat(400), envelopeUrl: "https://s.test", url: "https://s.test/d" }).subject).toHaveLength(150);
   });
 
   it("includes the code and the optional message", () => {

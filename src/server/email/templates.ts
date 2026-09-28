@@ -1,13 +1,14 @@
 import "server-only";
 
-export type EmailKind = "invite" | "reminder" | "otp" | "declined" | "completed" | "expired" | "voided";
+export type EmailKind = "invite" | "reminder" | "otp" | "declined" | "completed" | "signed_copy" | "expired" | "voided";
 
 export type EmailData = {
   invite: { title: string; senderName: string; recipientName: string; message?: string | null; url: string; expiresAt: string };
   reminder: { title: string; senderName: string; recipientName: string; url: string; expiresAt: string };
   otp: { title: string; code: string };
   declined: { title: string; signerName: string; signerEmail: string; reason: string; envelopeUrl: string };
-  completed: { title: string; envelopeUrl: string };
+  completed: { title: string; envelopeUrl: string; url: string };
+  signed_copy: { title: string; senderName: string; recipientName: string; url: string };
   expired: { title: string; envelopeUrl: string };
   voided: { title: string; senderName: string; reason: string };
 };
@@ -86,8 +87,17 @@ export function renderEmail<K extends EmailKind>(kind: K, data: EmailData[K]): R
     case "completed": {
       const d = data as EmailData["completed"];
       return layout(`Completed: "${d.title}"`, `Everyone signed: ${d.title}`, [
-        { kind: "p", text: "All signers have signed. The sealed PDF will be ready on the envelope page." },
-        { kind: "button", label: "Open envelope", url: d.envelopeUrl },
+        { kind: "p", text: "All signers have signed. The signed PDF is sealed, with a certificate of completion on its last pages." },
+        { kind: "button", label: "Download signed PDF", url: d.url },
+        { kind: "p", text: `This download link works for 7 days. You can always download it again from the envelope page: ${d.envelopeUrl}` },
+      ]);
+    }
+    case "signed_copy": {
+      const d = data as EmailData["signed_copy"];
+      return layout(`Your signed copy of "${d.title}"`, `Signed: ${d.title}`, [
+        { kind: "p", text: `Hi ${d.recipientName}, everyone has signed "${d.title}". Here is your copy of the signed PDF.` },
+        { kind: "button", label: "Download signed PDF", url: d.url },
+        { kind: "p", text: `This link works for 7 days. After that, ask ${d.senderName} for a copy. The PDF is sealed: PDF readers show it as changed if anyone edits it.` },
       ]);
     }
     case "expired": {

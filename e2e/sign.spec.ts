@@ -1,6 +1,8 @@
 import { test, expect, type Browser, type Page } from "@playwright/test";
 import { createAndSend, enterCode, newUser, signUpWithWorkspace } from "./helpers";
-import { signingLink } from "./mail";
+import { signingLink, waitForMail } from "./mail";
+
+const signingCopy = (to: string, title: string, since: Date) => waitForMail(to, since, new RegExp(`^Your signed copy of "${title}"$`));
 
 async function signerPage(browser: Browser, path: string) {
   const page = await (await browser.newContext()).newPage();
@@ -53,6 +55,18 @@ test("two signers sign in order and the envelope completes", async ({ page, brow
 
   await page.goto(envelopeUrl);
   await expect(page.getByText("completed", { exact: true }).first()).toBeVisible();
+
+  // The worker seals the PDF; the page picks it up by itself.
+  const download = page.getByRole("link", { name: "Download signed PDF" });
+  await expect(download).toBeVisible({ timeout: 45_000 });
+  const pdf = await page.request.get(`${envelopeUrl}/signed`);
+  expect(pdf.headers()["content-type"]).toContain("application/pdf");
+  const body = (await pdf.body()).toString("latin1");
+  expect(body.startsWith("%PDF-")).toBe(true);
+  expect(body).toContain("/SubFilter /ETSI.CAdES.detached");
+  // Every signer gets their copy by email.
+  await signingCopy("ada@e2e.dev", "Two Step Deal", since);
+  await signingCopy("bo@e2e.dev", "Two Step Deal", since);
 });
 
 test("a signer declines and the envelope closes for everyone", async ({ page, browser }) => {

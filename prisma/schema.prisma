@@ -184,6 +184,9 @@ model Envelope {
   voidReason        String?        @map("void_reason")
   sealedS3Key       String?        @map("sealed_s3_key")
   sealedSha256      String?        @map("sealed_sha256")
+  sealAttempts      Int            @default(0) @map("seal_attempts")
+  sealRunAt         DateTime?      @map("seal_run_at") @db.Timestamptz
+  sealLockedUntil   DateTime?      @map("seal_locked_until") @db.Timestamptz
   auditSeq          Int            @default(0) @map("audit_seq")
   createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz
   updatedAt         DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz

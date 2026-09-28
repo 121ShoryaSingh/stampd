@@ -4,6 +4,7 @@ import { S3Client, CreateBucketCommand } from "@aws-sdk/client-s3";
 import type { TestProject } from "vitest/node";
 import { execSync } from "node:child_process";
 import pg from "pg";
+import { selfSignedSealP12 } from "../src/server/finalize/dev-cert";
 
 let db: StartedPostgreSqlContainer | undefined;
 let s3c: StartedTestContainer | undefined;
@@ -45,6 +46,7 @@ export default async function setup(project: TestProject) {
   project.provide("smtpHost", mail.getHost());
   project.provide("smtpPort", mail.getMappedPort(1025));
   project.provide("mailpitUrl", `http://${mail.getHost()}:${mail.getMappedPort(8025)}`);
+  project.provide("sealP12", selfSignedSealP12({ commonName: "Stampd Test Seal", password: "test" }).toString("base64"));
 
   return async () => {
     await Promise.all([db?.stop(), s3c?.stop(), mail?.stop()]);
@@ -59,5 +61,6 @@ declare module "vitest" {
     smtpHost: string;
     smtpPort: number;
     mailpitUrl: string;
+    sealP12: string;
   }
 }

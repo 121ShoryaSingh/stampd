@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Activity, ExternalLink, FileText, PenLine, Trash2 } from "lucide-react";
+import { Activity, Download, ExternalLink, FileText, PenLine, RotateCcw, ShieldCheck, Trash2 } from "lucide-react";
 import { requireTenant } from "@/server/tenants/current";
 import { getEnvelope } from "@/server/envelopes/service";
 import { withTenant } from "@/server/db/context";
@@ -15,8 +15,8 @@ import { PageHeader } from "@/components/ui/layout";
 import { StatusPill } from "@/components/app/status-pill";
 import { UploadForm } from "./upload-form";
 import { SendForm } from "./send-form";
-import { ResendButton, Thumbnail, VoidButton } from "./parts";
-import { deleteDraftAction } from "./actions";
+import { AutoRefresh, ResendButton, Thumbnail, VoidButton } from "./parts";
+import { deleteDraftAction, retryFinalizeAction } from "./actions";
 import { describeEvent, relativeTime } from "./activity";
 
 const time = (d: Date | null) => (d ? d.toISOString().replace("T", " ").slice(0, 16) + " UTC" : null);
@@ -106,6 +106,39 @@ export default async function EnvelopePage({ params, searchParams }: { params: P
               <UploadForm envelopeId={id} hasDocument={false} />
             )}
           </Card>
+
+          {envelope.status === "completed" && (
+            <Card className="rise">
+              <h2 className="mb-4 flex items-center gap-2 font-display text-2xl">
+                <ShieldCheck aria-hidden className="h-6 w-6" /> Signed PDF
+              </h2>
+              {envelope.sealedS3Key ? (
+                <div className="space-y-2">
+                  <p>Sealed with a certificate of completion. PDF readers flag any change made after sealing.</p>
+                  <a href={`/envelopes/${id}/signed`} className="border-brutal shadow-hard-sm press inline-flex items-center gap-2 bg-green px-4 py-2.5 text-sm font-bold uppercase">
+                    <Download aria-hidden className="h-4 w-4" /> Download signed PDF
+                  </a>
+                  <p className="break-all font-mono text-[10px] opacity-60">SHA-256 {envelope.sealedSha256}</p>
+                </div>
+              ) : envelope.sealRunAt ? (
+                <p role="status">
+                  <AutoRefresh />
+                  Preparing the signed PDF. This page shows the download when it is ready.
+                  {envelope.lastError && <span className="mt-2 block font-mono text-xs">Retrying after an error: {envelope.lastError}</span>}
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  <p role="alert" className="border-brutal bg-red p-3 font-bold text-ink">
+                    The signed PDF could not be created: {envelope.lastError ?? "unknown error"}
+                  </p>
+                  <form action={retryFinalizeAction}>
+                    <input type="hidden" name="envelopeId" value={id} />
+                    <Button icon={<RotateCcw aria-hidden className="h-4 w-4" />}>Try again</Button>
+                  </form>
+                </div>
+              )}
+            </Card>
+          )}
 
           <Card className="rise" style={{ "--i": 1 } as React.CSSProperties}>
             <h2 className="mb-4 font-display text-2xl">Signers</h2>

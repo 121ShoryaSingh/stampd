@@ -21,6 +21,10 @@ const schema = z.object({
   SMTP_PASS: opt(z.string().min(1)),
   EMAIL_FROM_NAME: opt(z.string().min(1).max(100)),
   EMAIL_FROM_ADDRESS: opt(z.string().email()),
+  // Seal certificate (PKCS#12), used by the worker: a file path or the file as base64.
+  SEAL_P12_PATH: opt(z.string().min(1)),
+  SEAL_P12_BASE64: opt(z.string().min(1)),
+  SEAL_P12_PASSWORD: opt(z.string()),
 });
 
 export const env = schema.parse(process.env);

@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requireTenant } from "@/server/tenants/current";
 import { deleteDraft, finalizeUpload, resendInvite, voidEnvelope } from "@/server/envelopes/service";
 import { sendEnvelope } from "@/server/envelopes/send";
+import { retryFinalize } from "@/server/finalize/service";
 import { DomainError } from "@/server/errors";
 
 async function guard<T>(fn: () => Promise<T>): Promise<{ error?: string; data?: T }> {
@@ -72,6 +73,14 @@ export async function resendAction(envelopeId: string, recipientId: string) {
   const res = await guard(() => resendInvite({ tenantId: tenant.tenantId, userId: session.user.id, ...p }));
   revalidatePath(`/envelopes/${p.envelopeId}`);
   return { error: res.error };
+}
+
+export async function retryFinalizeAction(form: FormData) {
+  const { session, tenant } = await requireTenant();
+  const envelopeId = z.string().uuid().parse(form.get("envelopeId"));
+  const res = await guard(() => retryFinalize({ tenantId: tenant.tenantId, userId: session.user.id, envelopeId }));
+  if (res.error) redirect(`/envelopes/${envelopeId}?error=${encodeURIComponent(res.error)}`);
+  revalidatePath(`/envelopes/${envelopeId}`);
 }
 
 export async function deleteDraftAction(form: FormData) {

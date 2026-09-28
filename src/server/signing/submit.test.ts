@@ -61,9 +61,9 @@ describe("submitSigning", () => {
     expect(env.completedAt).toBeInstanceOf(Date);
     const events = await withTenant(s.tenantId, (tx) => listAudit(tx, s.envelopeId));
     expect(events.slice(-2).map((e) => e.event)).toEqual(["signed", "completed"]);
-    const sender = await admin.user.findUniqueOrThrow({ where: { id: s.userId } });
-    const done = await admin.emailJob.findFirstOrThrow({ where: { envelopeId: s.envelopeId, kind: "completed" } });
-    expect(done).toMatchObject({ toEmail: sender.email, recipientId: null });
+    // Sealing is queued for the worker; the completion email follows the seal.
+    expect(env.sealRunAt).toBeInstanceOf(Date);
+    expect(await admin.emailJob.count({ where: { envelopeId: s.envelopeId, kind: "completed" } })).toBe(0);
     expect((await withTenant(s.tenantId, (tx) => verifyChain(tx, s.envelopeId))).ok).toBe(true);
   });
 

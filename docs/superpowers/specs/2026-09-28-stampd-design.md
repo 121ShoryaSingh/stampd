@@ -199,6 +199,9 @@ Job `finalize-envelope` (singleton key = envelope id, idempotent):
    sender with a download link (signed URL, 7 days).
 Failure: retry 3 times with backoff; then set `last_error` and show a
 "finalization failed, retry" action to the sender.
+Implementation (Plan 6): job state lives on the envelope (`seal_run_at`,
+`seal_attempts`, `seal_locked_until`); the seal is ETSI.CAdES.detached with a
+signingCertificateV2 attribute; certificate text uses DejaVu Sans.
 
 Other jobs:
 - `send-email`: render the template (all user text HTML-escaped), send over SMTP with nodemailer; retry 5 times with backoff.

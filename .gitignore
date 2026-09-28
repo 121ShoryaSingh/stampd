@@ -49,3 +49,11 @@ next-env.d.ts
 # prisma
 /src/generated/
 /public/pdf.worker.min.mjs
+
+# signing certificates and local secrets
+/.secrets/
+*.p12
+*.pfx
+
+# worker bundle
+/dist/
