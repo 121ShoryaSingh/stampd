@@ -4,9 +4,9 @@
 
 **Goal:** A sender can create an envelope, upload a PDF, add recipients with a signing order, place fields on the pages, and send it, with every step recorded in a hash-chained audit log.
 
-**Architecture:** New tenant tables (envelopes, documents, recipients, fields, audit_events) under the same RLS pattern as Plan 1. PDFs go browser -> S3 directly via a presigned POST (size and type enforced by S3), then the server verifies the object with pdf-lib. All rules live in `src/server/envelopes/*` services; pages call them through server actions. The field editor renders pages with pdf.js in the browser and stores field boxes as fractions (0..1) of the page size.
+**Architecture:** New tenant tables (envelopes, documents, recipients, fields, audit_events) under the same RLS pattern as Plan 1. Storage goes through `@khair/storage-adapter` (the same adapter as POS and Horizon), wrapped in `src/server/storage/storage.ts`. PDFs go browser -> bucket directly via a presigned PUT; a PUT cannot cap size, so the server downloads the object, enforces size/type/PDF validity, and deletes anything it rejects. All rules live in `src/server/envelopes/*` services; pages call them through server actions. The field editor renders pages with pdf.js in the browser and stores field boxes as fractions (0..1) of the page size.
 
-**Tech Stack:** as Plan 1, plus `@aws-sdk/client-s3`, `@aws-sdk/s3-presigned-post`, `@aws-sdk/s3-request-presigner`, `pdf-lib`, `pdfjs-dist`, MinIO (dev and tests).
+**Tech Stack:** as Plan 1, plus `@khair/storage-adapter` (with its S3 peers `@aws-sdk/client-s3`, `@aws-sdk/lib-storage`, `@aws-sdk/s3-request-presigner`), `pdf-lib`, `pdfjs-dist`, MinIO (dev and tests).
 
 **Spec:** `docs/superpowers/specs/2026-09-28-stampd-design.md` (sections 2, 4, 5 "Uploads", 7, 8). Plan 2 of 5. Builds on branch `plan-1-foundation`. The audit log (spec section 7) moves here from Plan 3 because create/upload/send events happen in this plan.
 
@@ -14,7 +14,8 @@
 
 - Everything in Plan 1's Global Constraints still applies (UUIDv7, timestamptz, RLS with ENABLE + FORCE, `server-only`, zod on every action, ASCII only, LF, short one-line comments, Neo-Brutalist design).
 - Ports: app 3100, dev Postgres 5433, dev MinIO 9100 (API) and 9101 (console).
-- Uploads: `application/pdf` only, max 25 MB (`26_214_400` bytes), max 200 pages, checked server-side after upload with pdf-lib.
+- Uploads: `application/pdf` only, max 25 MB (`26_214_400` bytes), max 200 pages, checked server-side after upload with pdf-lib (a presigned PUT cannot enforce size, so the server is the gate and deletes rejected objects).
+- All storage access goes through `src/server/storage/storage.ts`; nothing else imports `@khair/storage-adapter` or an AWS SDK.
 - One document per envelope in v1.
 - Field coordinates are fractions of page width/height: `0 <= x, y`, `w, h > 0`, `x + w <= 1`, `y + h <= 1`; `y` measured from the top of the page.
 - Only `draft` envelopes are editable. Status transitions lock the envelope row (`for update`) and append an audit event in the same transaction.
@@ -29,6 +30,7 @@
 3. Clicking Send twice (double click or two tabs) must send once; the second attempt gets a clear "already sent" error. Pinned in Task 6 (concurrent `sendEnvelope` test).
 4. A field dragged partly off the page, or on a page that does not exist, must be rejected by the server even if the browser allowed it. Pinned in Task 5.
 5. A forged upload key pointing at another workspace's or envelope's object must be rejected. Pinned in Task 4 (`finalizeUpload` key check).
+6. A file over 25 MB uploaded straight to the signed URL (bypassing the browser check) must be rejected and deleted. Pinned in Task 4 (oversize test).
 
 ---
 
@@ -39,7 +41,7 @@ compose.dev.yml                              + minio service
 .env.example                                 + S3_* vars
 src/server/env.ts                            + S3_* vars
 src/server/errors.ts                         + InvalidStateError
-src/server/storage/s3.ts                     S3 client, presignPost, presignGet, getObjectBytes
+src/server/storage/storage.ts                wraps @khair/storage-adapter: presignUpload, presignGet, getObjectBytes, putObject, deleteObject
 src/server/db/schema.ts                      + envelopes, documents, recipients, fields, audit_events
 src/server/db/sql/rls.sql                    + RLS for the new tables, audit append-only
 src/server/audit/canonical.ts                canonicalJson()
@@ -67,26 +69,28 @@ e2e/send.spec.ts
 
 ---
 
-### Task 1: Object storage (S3 / MinIO)
+### Task 1: Object storage (@khair/storage-adapter + MinIO)
 
 **Files:**
-- Create: `src/server/storage/s3.ts`, `src/server/storage/s3.test.ts`
+- Create: `src/server/storage/storage.ts`, `src/server/storage/storage.test.ts`
 - Modify: `compose.dev.yml`, `.env.example`, `.env.local`, `src/server/env.ts`, `tests/global-setup.ts`, `tests/setup.ts`, `package.json`
 
 **Interfaces:**
-- Produces:
-  - `presignPost(input: { key: string; contentType: string; maxBytes: number; expiresSec?: number }): Promise<{ url: string; fields: Record<string, string> }>`
+- Produces (the only storage API the rest of the app may use):
+  - `presignUpload(key: string, contentType: string, expiresSec?: number): Promise<string>` (a URL the browser PUTs to, with header `Content-Type: <contentType>`)
   - `presignGet(key: string, expiresSec?: number): Promise<string>`
   - `getObjectBytes(key: string): Promise<Uint8Array>` (throws `NotFoundError` if missing)
+  - `objectExists(key: string): Promise<boolean>`
   - `putObject(key: string, body: Uint8Array, contentType: string): Promise<void>`
-  - `deleteObject(key: string): Promise<void>`
-  - env: `S3_ENDPOINT`, `S3_PUBLIC_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`
+  - `deleteObject(key: string): Promise<void>` (no error if already gone)
+  - env: `S3_BUCKET`, `S3_REGION`, optional `S3_ENDPOINT` (MinIO/R2; unset for real AWS), optional `S3_ACCESS_KEY` + `S3_SECRET_KEY` (unset = AWS default credential chain, like Horizon)
 
 - [ ] **Step 1: Dependencies**
 
 ```bash
-npm i @aws-sdk/client-s3 @aws-sdk/s3-presigned-post @aws-sdk/s3-request-presigner pdf-lib pdfjs-dist
+npm i @khair/storage-adapter @aws-sdk/client-s3 @aws-sdk/lib-storage @aws-sdk/s3-request-presigner pdf-lib pdfjs-dist
 ```
+The adapter's GCS and Azure peers are optional and not needed.
 
 - [ ] **Step 2: Dev MinIO**
 
@@ -112,7 +116,6 @@ and add `miniodata:` under `volumes:`.
 Append to `.env.example` and `.env.local`:
 ```
 S3_ENDPOINT=http://localhost:9100
-S3_PUBLIC_ENDPOINT=http://localhost:9100
 S3_REGION=us-east-1
 S3_BUCKET=stampd-dev
 S3_ACCESS_KEY=stampd
@@ -130,12 +133,11 @@ const schema = z.object({
   DATABASE_URL: z.string().url(),
   BETTER_AUTH_SECRET: z.string().min(32),
   BETTER_AUTH_URL: z.string().url(),
-  S3_ENDPOINT: z.string().url(),
-  S3_PUBLIC_ENDPOINT: z.string().url(), // what browsers use; differs from S3_ENDPOINT inside Docker
-  S3_REGION: z.string().min(1),
   S3_BUCKET: z.string().min(3),
-  S3_ACCESS_KEY: z.string().min(1),
-  S3_SECRET_KEY: z.string().min(1),
+  S3_REGION: z.string().min(1),
+  S3_ENDPOINT: z.string().url().optional(), // MinIO / R2; leave unset for AWS S3
+  S3_ACCESS_KEY: z.string().min(1).optional(),
+  S3_SECRET_KEY: z.string().min(1).optional(),
 });
 ```
 
@@ -164,7 +166,6 @@ Change the teardown to `await Promise.all([container?.stop(), minio?.stop()]);` 
 Append to `tests/setup.ts`:
 ```ts
 process.env.S3_ENDPOINT = inject("s3Url");
-process.env.S3_PUBLIC_ENDPOINT = inject("s3Url");
 process.env.S3_REGION = "us-east-1";
 process.env.S3_BUCKET = "stampd-test";
 process.env.S3_ACCESS_KEY = "test";
@@ -173,118 +174,107 @@ process.env.S3_SECRET_KEY = "test-secret-123";
 
 - [ ] **Step 5: Write the failing storage test**
 
-`src/server/storage/s3.test.ts`:
+`src/server/storage/storage.test.ts`:
 ```ts
 import { describe, it, expect } from "vitest";
 import { randomUUID } from "node:crypto";
-import { presignPost, presignGet, getObjectBytes, putObject, deleteObject } from "./s3";
+import { presignUpload, presignGet, getObjectBytes, objectExists, putObject, deleteObject } from "./storage";
 import { NotFoundError } from "@/server/errors";
 
-async function upload(post: { url: string; fields: Record<string, string> }, body: Uint8Array, type = "application/pdf") {
-  const form = new FormData();
-  for (const [k, v] of Object.entries(post.fields)) form.append(k, v);
-  form.append("file", new Blob([body], { type }));
-  return fetch(post.url, { method: "POST", body: form });
-}
+const key = () => `t/test/e/test/${randomUUID()}.pdf`;
 
-describe("s3 storage", () => {
-  it("round-trips an object via presigned POST and GET", async () => {
-    const key = `t/test/e/test/${randomUUID()}.pdf`;
-    const post = await presignPost({ key, contentType: "application/pdf", maxBytes: 1000 });
-    const res = await upload(post, new TextEncoder().encode("%PDF-hello"));
-    expect(res.status).toBe(204);
-    expect(new TextDecoder().decode(await getObjectBytes(key))).toBe("%PDF-hello");
-    const url = await presignGet(key);
-    expect(await (await fetch(url)).text()).toBe("%PDF-hello");
+describe("storage", () => {
+  it("round-trips an object via presigned PUT and GET", async () => {
+    const k = key();
+    const url = await presignUpload(k, "application/pdf");
+    const put = await fetch(url, { method: "PUT", headers: { "Content-Type": "application/pdf" }, body: "%PDF-hello" });
+    expect(put.status).toBe(200);
+    expect(new TextDecoder().decode(await getObjectBytes(k))).toBe("%PDF-hello");
+    expect(await (await fetch(await presignGet(k))).text()).toBe("%PDF-hello");
   });
 
-  it("rejects uploads over the size limit", async () => {
-    const post = await presignPost({ key: `t/x/e/x/${randomUUID()}.pdf`, contentType: "application/pdf", maxBytes: 10 });
-    const res = await upload(post, new Uint8Array(11));
-    expect(res.status).toBe(400);
+  it("reports existence and deletes", async () => {
+    const k = key();
+    expect(await objectExists(k)).toBe(false);
+    await putObject(k, new Uint8Array([1, 2]), "application/pdf");
+    expect(await objectExists(k)).toBe(true);
+    await deleteObject(k);
+    expect(await objectExists(k)).toBe(false);
+    await expect(deleteObject(k)).resolves.toBeUndefined();
   });
 
-  it("rejects the wrong content type", async () => {
-    const post = await presignPost({ key: `t/x/e/x/${randomUUID()}.pdf`, contentType: "application/pdf", maxBytes: 1000 });
-    const res = await upload(post, new Uint8Array(5), "text/plain");
-    expect(res.status).toBe(403);
-  });
-
-  it("throws NotFoundError for a missing key and after delete", async () => {
-    const key = `t/x/e/x/${randomUUID()}.pdf`;
-    await expect(getObjectBytes(key)).rejects.toBeInstanceOf(NotFoundError);
-    await putObject(key, new Uint8Array([1, 2]), "application/pdf");
-    await deleteObject(key);
-    await expect(getObjectBytes(key)).rejects.toBeInstanceOf(NotFoundError);
+  it("throws NotFoundError for a missing key", async () => {
+    await expect(getObjectBytes(key())).rejects.toBeInstanceOf(NotFoundError);
   });
 });
 ```
-The form field `Content-Type` is set by `presignPost` in `fields`; the Blob type in the test is what the browser would send, but S3 checks the `Content-Type` form field. So for the wrong-type test, override it: before `form.append("file", ...)`, the helper must let the test replace the field. Change the helper call in that test to:
-```ts
-    const res = await upload({ ...post, fields: { ...post.fields, "Content-Type": "text/plain" } }, new Uint8Array(5), "text/plain");
-```
 
 Run: `npx vitest run src/server/storage`
-Expected: FAIL, cannot find `./s3`.
+Expected: FAIL, cannot find `./storage`.
 
-- [ ] **Step 6: Implement storage**
+- [ ] **Step 6: Implement the wrapper**
 
-`src/server/storage/s3.ts`:
+`src/server/storage/storage.ts`:
 ```ts
 import "server-only";
-import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand, NoSuchKey } from "@aws-sdk/client-s3";
-import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { createStorageAdapter, StorageOperationError } from "@khair/storage-adapter";
 import { env } from "@/server/env";
 import { NotFoundError } from "@/server/errors";
 
-const creds = { accessKeyId: env.S3_ACCESS_KEY, secretAccessKey: env.S3_SECRET_KEY };
-const s3 = new S3Client({ endpoint: env.S3_ENDPOINT, region: env.S3_REGION, forcePathStyle: true, credentials: creds });
-// Signs URLs with the host browsers can reach.
-const publicS3 = new S3Client({ endpoint: env.S3_PUBLIC_ENDPOINT, region: env.S3_REGION, forcePathStyle: true, credentials: creds });
+// Same adapter as POS and Horizon; static keys only when given, else the AWS default chain.
+const adapter = createStorageAdapter({
+  provider: "s3",
+  bucket: env.S3_BUCKET,
+  region: env.S3_REGION,
+  ...(env.S3_ACCESS_KEY && env.S3_SECRET_KEY ? { accessKeyId: env.S3_ACCESS_KEY, secretAccessKey: env.S3_SECRET_KEY } : {}),
+  ...(env.S3_ENDPOINT ? { endpoint: env.S3_ENDPOINT, forcePathStyle: true } : {}),
+});
 
-export async function presignPost(i: { key: string; contentType: string; maxBytes: number; expiresSec?: number }) {
-  return createPresignedPost(publicS3, {
-    Bucket: env.S3_BUCKET,
-    Key: i.key,
-    Fields: { "Content-Type": i.contentType },
-    Conditions: [["content-length-range", 1, i.maxBytes], ["eq", "$Content-Type", i.contentType]],
-    Expires: i.expiresSec ?? 300,
-  });
+const notFound = (e: unknown) => e instanceof StorageOperationError && e.code === "NOT_FOUND";
+
+export function presignUpload(key: string, contentType: string, expiresSec = 300): Promise<string> {
+  return adapter.getSignedUploadUrl(key, { contentType, expiresInSeconds: expiresSec });
 }
 
-export async function presignGet(key: string, expiresSec = 300): Promise<string> {
-  return getSignedUrl(publicS3, new GetObjectCommand({ Bucket: env.S3_BUCKET, Key: key }), { expiresIn: expiresSec });
+export function presignGet(key: string, expiresSec = 300): Promise<string> {
+  return adapter.getSignedUrl(key, { expiresInSeconds: expiresSec });
 }
 
 export async function getObjectBytes(key: string): Promise<Uint8Array> {
   try {
-    const res = await s3.send(new GetObjectCommand({ Bucket: env.S3_BUCKET, Key: key }));
-    return await res.Body!.transformToByteArray();
+    return new Uint8Array(await adapter.download(key));
   } catch (e) {
-    if (e instanceof NoSuchKey || (e as { name?: string }).name === "NoSuchKey") throw new NotFoundError("File not found");
+    if (notFound(e)) throw new NotFoundError("File not found");
     throw e;
   }
 }
 
+export function objectExists(key: string): Promise<boolean> {
+  return adapter.exists(key);
+}
+
 export async function putObject(key: string, body: Uint8Array, contentType: string): Promise<void> {
-  await s3.send(new PutObjectCommand({ Bucket: env.S3_BUCKET, Key: key, Body: body, ContentType: contentType }));
+  await adapter.upload(key, body, { contentType });
 }
 
 export async function deleteObject(key: string): Promise<void> {
-  await s3.send(new DeleteObjectCommand({ Bucket: env.S3_BUCKET, Key: key }));
+  try {
+    await adapter.delete(key);
+  } catch (e) {
+    if (!notFound(e)) throw e;
+  }
 }
 ```
 
 Run: `npx vitest run src/server/storage`
-Expected: 4 PASS.
+Expected: 3 PASS.
 
 - [ ] **Step 7: Commit**
 
 ```bash
 npm test
 git add -A
-git commit -m "feat: S3 storage with presigned uploads and MinIO for dev and tests"
+git commit -m "feat: object storage via @khair/storage-adapter with MinIO for dev and tests"
 ```
 
 ---
@@ -768,7 +758,7 @@ git commit -m "feat: hash-chained append-only audit log"
   - `uploadKeyFor(tenantId: string, envelopeId: string): string`, `isUploadKeyFor(key: string, tenantId: string, envelopeId: string): boolean`
   - `inspectPdf(bytes: Uint8Array): Promise<{ pageCount: number; pageSizes: PageSize[] }>` (throws `ValidationError`)
   - `createEnvelope(i: { tenantId; userId; title }): Promise<{ id: string }>`
-  - `createUploadUrl(i: { tenantId; envelopeId }): Promise<{ url; fields; key }>`
+  - `createUploadUrl(i: { tenantId; envelopeId }): Promise<{ url: string; key: string }>` (url is a presigned PUT)
   - `finalizeUpload(i: { tenantId; userId; envelopeId; key; filename }): Promise<{ documentId: string; pageCount: number }>`
   - `getEnvelope(tenantId, envelopeId)`: `{ envelope, document: Document | null, recipients: Recipient[], fields: Field[] }` (throws `NotFoundError`)
   - `listEnvelopes(tenantId, filter?: { status?: EnvelopeStatus })`: `{ id, title, status, createdAt, sentAt, recipientCount, signedCount }[]`
@@ -800,7 +790,7 @@ import { randomUUID } from "node:crypto";
 import { migratorSql, insertUser } from "../../../tests/helpers/db";
 import { makePdf } from "../../../tests/helpers/pdf";
 import { createTenant } from "@/server/tenants/service";
-import { putObject } from "@/server/storage/s3";
+import { putObject, objectExists } from "@/server/storage/storage";
 import { withTenant } from "@/server/db/tenant";
 import { listAudit } from "@/server/audit/service";
 import {
@@ -843,9 +833,9 @@ describe("envelope drafts", () => {
 
   it("presigns an upload scoped to the envelope", async () => {
     const { id } = await createEnvelope({ tenantId, userId, title: "T" });
-    const { key, fields } = await createUploadUrl({ tenantId, envelopeId: id });
+    const { key, url } = await createUploadUrl({ tenantId, envelopeId: id });
     expect(key.startsWith(`t/${tenantId}/e/${id}/`)).toBe(true);
-    expect(fields.key).toBe(key);
+    expect(url).toContain(key);
   });
 
   it("finalizes a real PDF: page count, sizes, hash, audit", async () => {
@@ -866,6 +856,23 @@ describe("envelope drafts", () => {
     await putObject(key2, await makePdf(4), "application/pdf");
     await finalizeUpload({ tenantId, userId, envelopeId: id, key: key2, filename: "b.pdf" });
     expect((await getEnvelope(tenantId, id)).document).toMatchObject({ filename: "b.pdf", pageCount: 4 });
+  });
+
+  it("rejects a file over 25 MB and deletes it", async () => {
+    const { id } = await createEnvelope({ tenantId, userId, title: "Huge" });
+    const key = uploadKeyFor(tenantId, id);
+    const big = new Uint8Array(26_214_401);
+    big.set(new TextEncoder().encode("%PDF-"));
+    await putObject(key, big, "application/pdf");
+    await expect(finalizeUpload({ tenantId, userId, envelopeId: id, key, filename: "big.pdf" })).rejects.toThrow(/25 MB/);
+    expect(await objectExists(key)).toBe(false);
+  });
+
+  it("gives a clear error when the upload never reached storage", async () => {
+    const { id } = await createEnvelope({ tenantId, userId, title: "Ghost" });
+    await expect(
+      finalizeUpload({ tenantId, userId, envelopeId: id, key: uploadKeyFor(tenantId, id), filename: "g.pdf" }),
+    ).rejects.toThrow(/did not finish/);
   });
 
   it("rejects bytes that are not a PDF, leaving no document", async () => {
@@ -975,7 +982,7 @@ import { and, count, desc, eq, sql } from "drizzle-orm";
 import { withTenant, type Tx } from "@/server/db/tenant";
 import { documents, envelopes, fields, recipients, type EnvelopeStatus } from "@/server/db/schema";
 import { appendAudit } from "@/server/audit/service";
-import { deleteObject, getObjectBytes, presignPost } from "@/server/storage/s3";
+import { deleteObject, getObjectBytes, objectExists, presignUpload } from "@/server/storage/storage";
 import { InvalidStateError, NotFoundError, ValidationError } from "@/server/errors";
 import { inspectPdf } from "./pdf";
 import { isUploadKeyFor, uploadKeyFor } from "./keys";
@@ -1013,14 +1020,17 @@ export async function createEnvelope(i: { tenantId: string; userId: string; titl
 export async function createUploadUrl(i: { tenantId: string; envelopeId: string }) {
   await withTenant(i.tenantId, (tx) => lockDraft(tx, i.envelopeId));
   const key = uploadKeyFor(i.tenantId, i.envelopeId);
-  const post = await presignPost({ key, contentType: "application/pdf", maxBytes: MAX_UPLOAD_BYTES });
-  return { ...post, key };
+  return { url: await presignUpload(key, "application/pdf"), key };
 }
 
 export async function finalizeUpload(i: { tenantId: string; userId: string; envelopeId: string; key: string; filename: string }) {
   if (!isUploadKeyFor(i.key, i.tenantId, i.envelopeId)) throw new ValidationError("This upload does not belong to this envelope");
+  if (!(await objectExists(i.key))) throw new ValidationError("The upload did not finish. Please try again.");
   const bytes = await getObjectBytes(i.key);
-  if (bytes.byteLength > MAX_UPLOAD_BYTES) throw new ValidationError("PDFs can be at most 25 MB");
+  if (bytes.byteLength > MAX_UPLOAD_BYTES) {
+    await deleteObject(i.key);
+    throw new ValidationError("PDFs can be at most 25 MB");
+  }
   let info: Awaited<ReturnType<typeof inspectPdf>>;
   try {
     info = await inspectPdf(bytes);
@@ -1112,7 +1122,7 @@ export async function voidEnvelope(i: { tenantId: string; userId: string; envelo
 Note on `deleteDraft`: the audit rows cascade with the envelope. That is intended for drafts only (nothing was sent to anyone); sent envelopes cannot be deleted.
 
 Run: `npx vitest run src/server/envelopes/service.test.ts`
-Expected: 11 PASS. (The void-of-a-sent-envelope path is tested in Task 6.)
+Expected: 13 PASS. (The void-of-a-sent-envelope path is tested in Task 6.)
 
 - [ ] **Step 5: Commit**
 
@@ -1223,7 +1233,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { migratorSql, insertUser } from "../../../tests/helpers/db";
 import { makePdf } from "../../../tests/helpers/pdf";
 import { createTenant } from "@/server/tenants/service";
-import { putObject } from "@/server/storage/s3";
+import { putObject } from "@/server/storage/storage";
 import { createEnvelope, finalizeUpload, getEnvelope, uploadKeyFor } from "./service";
 import { setRecipients } from "./recipients";
 import { saveFields } from "./fields";
@@ -1476,7 +1486,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { migratorSql, insertUser } from "../../../tests/helpers/db";
 import { makePdf } from "../../../tests/helpers/pdf";
 import { createTenant } from "@/server/tenants/service";
-import { putObject } from "@/server/storage/s3";
+import { putObject } from "@/server/storage/storage";
 import { withTenant } from "@/server/db/tenant";
 import { listAudit, verifyChain } from "@/server/audit/service";
 import { hashToken } from "@/server/team/service";
@@ -1662,7 +1672,7 @@ git commit -m "feat: send and void envelopes with routing, hashed signer tokens 
 
 **Interfaces:**
 - Consumes: all Task 4-6 services; `requireTenant` (Plan 1); `presignGet`.
-- Produces: routes `/dashboard?status=`, `/envelopes/new`, `/envelopes/[id]`, `POST /api/uploads/presign` (JSON `{ envelopeId }` -> `{ url, fields, key }`); server actions `createEnvelopeAction`, `finalizeUploadAction(envelopeId, key, filename)`, `sendAction`, `voidAction`, `deleteDraftAction`.
+- Produces: routes `/dashboard?status=`, `/envelopes/new`, `/envelopes/[id]`, `POST /api/uploads/presign` (JSON `{ envelopeId }` -> `{ url, key }`); server actions `createEnvelopeAction`, `finalizeUploadAction(envelopeId, key, filename)`, `sendAction`, `voidAction`, `deleteDraftAction`.
 
 - [ ] **Step 1: Status pill**
 
@@ -1915,10 +1925,7 @@ export function UploadForm({ envelopeId, hasDocument }: { envelopeId: string; ha
       const pre = await fetch("/api/uploads/presign", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ envelopeId }) });
       const body = await pre.json();
       if (!pre.ok) throw new Error(body.error ?? "Upload failed");
-      const form = new FormData();
-      for (const [k, v] of Object.entries(body.fields as Record<string, string>)) form.append(k, v);
-      form.append("file", file);
-      const up = await fetch(body.url, { method: "POST", body: form });
+      const up = await fetch(body.url, { method: "PUT", headers: { "Content-Type": "application/pdf" }, body: file });
       if (!up.ok) throw new Error("Upload was rejected by storage");
       const res = await finalizeUploadAction(envelopeId, body.key, file.name);
       if (res.error) throw new Error(res.error);
@@ -1941,7 +1948,7 @@ export function UploadForm({ envelopeId, hasDocument }: { envelopeId: string; ha
   );
 }
 ```
-MinIO allows cross-origin POSTs by default. Real S3 or R2 needs a CORS rule for `POST` from the app origin (Plan 4 deployment notes).
+MinIO allows cross-origin PUTs by default. Real S3 or R2 needs a CORS rule allowing `PUT` with header `Content-Type` from the app origin (Plan 4 deployment notes).
 
 - [ ] **Step 7: Send form**
 
@@ -2000,7 +2007,7 @@ import { requireTenant } from "@/server/tenants/current";
 import { getEnvelope } from "@/server/envelopes/service";
 import { withTenant } from "@/server/db/tenant";
 import { listAudit } from "@/server/audit/service";
-import { presignGet } from "@/server/storage/s3";
+import { presignGet } from "@/server/storage/storage";
 import { NotFoundError } from "@/server/errors";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -2403,7 +2410,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireTenant } from "@/server/tenants/current";
 import { getEnvelope } from "@/server/envelopes/service";
-import { presignGet } from "@/server/storage/s3";
+import { presignGet } from "@/server/storage/storage";
 import { NotFoundError } from "@/server/errors";
 import { Card } from "@/components/ui/card";
 import { RecipientsForm } from "./recipients-form";
@@ -2575,6 +2582,6 @@ git commit -m "test: end-to-end envelope creation, upload, field placement and s
 
 ## Self-review notes
 
-- Spec coverage: section 2 envelopes/recipients/routing/fields/void (Tasks 4-6); section 4 data model + envelope states + tenant isolation for the new tables (Tasks 2, 4, 6); section 5 "Uploads" (Tasks 1, 4) and step 1 token generation (Task 6); section 7 audit chain (Task 3; the event list is extended as later plans emit signer events); section 8 dashboard, upload, field editor, detail (Tasks 7-8); section 10 integration + e2e (all). Signer flow is Plan 3; emails, reminders, expiry jobs and finalization are Plan 4.
+- Spec coverage: section 2 envelopes/recipients/routing/fields/void (Tasks 4-6); section 4 data model + envelope states + tenant isolation for the new tables (Tasks 2, 4, 6); section 5 "Uploads" (Tasks 1, 4; size enforced server-side because the shared adapter signs PUT URLs) and step 1 token generation (Task 6); section 7 audit chain (Task 3; the event list is extended as later plans emit signer events); section 8 dashboard, upload, field editor, detail (Tasks 7-8); section 10 integration + e2e (all). Signer flow is Plan 3; emails, reminders, expiry jobs and finalization are Plan 4.
 - Review Focus items pinned: 1 -> Task 4 (non-PDF, truncated) + Task 9 e2e; 2 -> Task 5; 3 -> Task 6; 4 -> Task 5; 5 -> Task 4.
 - Types: `lockDraft`/`lockEnvelope` defined in Task 4 and used in Tasks 5-6; `hashToken` from Plan 1 `src/server/team/service.ts`; `FieldKind` (client) mirrors `FieldType` (server) values exactly.
