@@ -1,11 +1,13 @@
 "use client";
 
 import { useActionState } from "react";
+import { useRouter } from "next/navigation";
 import { sendAction } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 export function SendForm({ envelopeId }: { envelopeId: string }) {
+  const router = useRouter();
   const [state, action, pending] = useActionState(sendAction, {});
   if (state.links) {
     return (
@@ -26,6 +28,10 @@ export function SendForm({ envelopeId }: { envelopeId: string }) {
             </li>
           ))}
         </ul>
+        <p className="mt-3 font-mono text-xs">These links are shown once. Copy them before you leave.</p>
+        <Button type="button" className="mt-3" onClick={() => router.refresh()}>
+          Done
+        </Button>
       </div>
     );
   }

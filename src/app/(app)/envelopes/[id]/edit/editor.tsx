@@ -27,7 +27,9 @@ export function FieldEditor(props: { envelopeId: string; pdfUrl: string; pageSiz
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [fields, setFields] = useState<EditorField[]>(props.initial);
   const [tool, setTool] = useState<FieldKind | null>(null);
-  const [assignee, setAssignee] = useState(signers[0]?.id ?? "");
+  const [picked, setAssignee] = useState(signers[0]?.id ?? "");
+  // Signers can change after load (recipients saved above), so fall back to the first one.
+  const assignee = signers.some((s) => s.id === picked) ? picked : (signers[0]?.id ?? "");
   const [selected, setSelected] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ ok?: string; error?: string }>({});
   const drag = useRef<Drag | null>(null);

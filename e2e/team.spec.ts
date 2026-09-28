@@ -1,15 +1,9 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
+import { fillSignup } from "./helpers";
 
 const stamp = Date.now();
 const owner = { name: "Olive Owner", email: `owner-${stamp}@e2e.dev`, password: "correct-horse-1" };
 const mate = { name: "Mo Mate", email: `mate-${stamp}@e2e.dev`, password: "correct-horse-2" };
-
-async function fillSignup(page: Page, u: typeof owner) {
-  await page.getByLabel("Your name").fill(u.name);
-  await page.getByLabel("Work email").fill(u.email);
-  await page.getByLabel("Password").fill(u.password);
-  await page.getByRole("button", { name: "Create account" }).click();
-}
 
 test("owner creates a workspace, invites a teammate who joins", async ({ browser }) => {
   const ownerPage = await (await browser.newContext()).newPage();

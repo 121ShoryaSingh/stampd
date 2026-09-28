@@ -53,7 +53,7 @@ export async function sendAction(_prev: { error?: string; links?: Links }, form:
       message: p.data.message,
     }),
   );
-  revalidatePath(`/envelopes/${p.data.envelopeId}`);
+  // No revalidate here: the form must stay mounted to show the one-time links; "Done" refreshes.
   if (res.error) return { error: res.error };
   return { links: res.data!.map(({ email, name, routingOrder, url }) => ({ email, name, routingOrder, url })) };
 }
