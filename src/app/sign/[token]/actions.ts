@@ -28,7 +28,7 @@ async function guard<T>(fn: () => Promise<T>): Promise<{ error?: string; data?: 
 export async function requestCodeAction(token: string) {
   const t = Token.parse(token);
   const res = await guard(async () => requestCode(t, await requestMeta()));
-  return res.error ? { error: res.error } : { devCode: res.data!.devCode };
+  return { error: res.error };
 }
 
 export async function verifyCodeAction(token: string, code: string) {

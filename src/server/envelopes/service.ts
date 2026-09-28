@@ -7,6 +7,8 @@ import { deleteObject, getObjectBytes, objectSize, presignUpload, putObject } fr
 import { InvalidStateError, NotFoundError, ValidationError } from "@/server/errors";
 import { inspectPdf } from "./pdf";
 import { documentKeyFor, isUploadKeyFor, uploadKeyFor } from "./keys";
+import { senderOf } from "./links";
+import { enqueueEmail } from "@/server/email/outbox";
 
 export { uploadKeyFor } from "./keys";
 export const MAX_UPLOAD_BYTES = 26_214_400;
@@ -167,7 +169,21 @@ export async function voidEnvelope(i: { tenantId: string; userId: string; envelo
   await withTenant(i.tenantId, async (tx) => {
     const env = await lockEnvelope(tx, i.envelopeId);
     if (env.status !== "sent") throw new InvalidStateError("Only sent envelopes can be voided");
-    await tx.envelope.update({ where: { id: i.envelopeId }, data: { status: "voided", voidedAt: new Date(), voidReason: reason } });
+    const voided = await tx.envelope.update({ where: { id: i.envelopeId }, data: { status: "voided", voidedAt: new Date(), voidReason: reason } });
     await appendAudit(tx, { tenantId: i.tenantId, envelopeId: i.envelopeId, actorType: "user", actorId: i.userId, event: "voided", data: { reason } });
+    // Tell everyone who already got a link; later steps never heard of it.
+    const told = await tx.recipient.findMany({ where: { envelopeId: i.envelopeId, invitedAt: { not: null } } });
+    const sender = await senderOf(tx, voided);
+    for (const r of told) {
+      await enqueueEmail(tx, {
+        tenantId: i.tenantId,
+        envelopeId: i.envelopeId,
+        recipientId: r.id,
+        kind: "voided",
+        toEmail: r.email,
+        toName: r.name,
+        data: { title: voided.title, senderName: sender.name, reason },
+      });
+    }
   });
 }

@@ -1,8 +1,8 @@
 "use client";
 
-import { useActionState, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useActionState, useEffect, useState } from "react";
 import { sendAction } from "./actions";
+import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DatePicker, daysUntil } from "@/components/ui/date-picker";
@@ -10,35 +10,13 @@ import { DatePicker, daysUntil } from "@/components/ui/date-picker";
 const DAY = 86_400_000;
 
 export function SendForm({ envelopeId }: { envelopeId: string }) {
-  const router = useRouter();
   const [state, action, pending] = useActionState(sendAction, {});
   const [days, setDays] = useState(30);
-  if (state.links) {
-    return (
-      <div className="border-brutal bg-green p-4">
-        <p className="font-display text-2xl">Sent.</p>
-        <p className="mt-1">Signing emails are coming soon. Until then, share these links:</p>
-        <ul className="mt-3 space-y-2">
-          {state.links.map((l) => (
-            <li key={l.email}>
-              <span className="font-bold">{l.name}</span> <span className="font-mono text-xs">(step {l.routingOrder})</span>
-              <input
-                readOnly
-                value={l.url}
-                aria-label={`Signing link for ${l.email}`}
-                onFocus={(e) => e.currentTarget.select()}
-                className="border-brutal mt-1 w-full bg-paper px-2 py-1 font-mono text-xs"
-              />
-            </li>
-          ))}
-        </ul>
-        <p className="mt-3 font-mono text-xs">These links are shown once. Copy them before you leave.</p>
-        <Button type="button" className="mt-3" onClick={() => router.refresh()}>
-          Done
-        </Button>
-      </div>
-    );
-  }
+  const { show } = useToast();
+  // The page re-renders as "sent"; the toast outlives this form.
+  useEffect(() => {
+    if (state.invited) show("Sent. Signing emails are on their way.");
+  }, [state, show]);
   return (
     <form action={action} className="space-y-4">
       <input type="hidden" name="envelopeId" value={envelopeId} />

@@ -2,6 +2,7 @@ import "server-only";
 import { timingSafeEqual } from "node:crypto";
 import { appendAudit } from "@/server/audit/service";
 import { presignGet } from "@/server/storage/storage";
+import { enqueueEmail } from "@/server/email/outbox";
 import { ForbiddenError, ValidationError } from "@/server/errors";
 import type { PageSize } from "@/server/db/types";
 import { inTenant, loadSigner, requireReady, resolveSigner, type ReqMeta, type SignerRef } from "./access";
@@ -42,11 +43,11 @@ export async function openLink(token: string, meta: ReqMeta) {
   });
 }
 
-export async function requestCode(token: string, meta: ReqMeta): Promise<{ devCode: string | null }> {
+export async function requestCode(token: string, meta: ReqMeta): Promise<{ email: string }> {
   const ref = await resolveSigner(token);
   const code = newCode();
-  await inTenant(ref, async (tx) => {
-    await requireReady(tx, ref);
+  return inTenant(ref, async (tx) => {
+    const { rec, env } = await requireReady(tx, ref);
     const now = new Date();
     // Atomic resend limit: only one request wins per 30 seconds.
     const claimed = await tx.recipient.updateMany({
@@ -55,9 +56,17 @@ export async function requestCode(token: string, meta: ReqMeta): Promise<{ devCo
     });
     if (claimed.count === 0) throw new ValidationError("Please wait a moment before requesting another code");
     await appendAudit(tx, audit(ref, "otp_sent", meta));
+    await enqueueEmail(tx, {
+      tenantId: ref.tenantId,
+      envelopeId: ref.envelopeId,
+      recipientId: ref.recipientId,
+      kind: "otp",
+      toEmail: rec.email,
+      toName: rec.name,
+      data: { title: env.title, code },
+    });
+    return { email: rec.email };
   });
-  if (process.env.NODE_ENV === "production") throw new Error("Email delivery is not configured yet");
-  return { devCode: code };
 }
 
 export async function verifyCode(token: string, code: string, meta: ReqMeta): Promise<{ recipientId: string; verifiedAt: Date }> {

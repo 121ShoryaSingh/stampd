@@ -10,6 +10,7 @@ import { createEnvelope, finalizeUpload, getEnvelope, uploadKeyFor, voidEnvelope
 import { setRecipients } from "./recipients";
 import { saveFields } from "./fields";
 import { sendEnvelope } from "./send";
+import { tokenFor } from "../../../tests/helpers/mail";
 
 const admin = adminDb();
 let tenantId: string, userId: string;
@@ -49,16 +50,22 @@ async function ready({ withFields = true } = {}) {
 }
 
 describe("sendEnvelope", () => {
-  it("sends: status, expiry, first routing step, hashed tokens, audit", async () => {
+  it("sends: status, expiry, first routing step, hashed tokens, invite emails, audit", async () => {
     const id = await ready();
-    const links = await sendEnvelope({ tenantId, userId, envelopeId: id, ...opts });
-    expect(links.map((l) => l.email).sort()).toEqual(["a@x.dev", "b@x.dev", "c@x.dev"]);
+    expect(await sendEnvelope({ tenantId, userId, envelopeId: id, ...opts, message: "Please <b>sign</b>" })).toEqual({ invited: 1 });
     const { envelope, recipients } = await getEnvelope(tenantId, id);
     expect(envelope.status).toBe("sent");
     expect(envelope.expiresAt!.getTime() - envelope.sentAt!.getTime()).toBe(30 * 86_400_000);
     expect(Object.fromEntries(recipients.map((r) => [r.email, r.status]))).toEqual({ "a@x.dev": "sent", "b@x.dev": "pending", "c@x.dev": "pending" });
-    const token = links.find((l) => l.email === "a@x.dev")!.url.split("/sign/")[1];
-    expect(recipients.find((r) => r.email === "a@x.dev")!.tokenHash).toBe(hashToken(token));
+    const jobs = await admin.emailJob.findMany({ where: { envelopeId: id } });
+    expect(jobs.map((j) => [j.kind, j.toEmail, j.status])).toEqual([["invite", "a@x.dev", "queued"]]);
+    expect(jobs[0].data).toMatchObject({ title: "Contract", recipientName: "A", message: "Please <b>sign</b>" });
+    const a = recipients.find((r) => r.email === "a@x.dev")!;
+    const token = (await tokenFor(admin, a.id))!;
+    expect(a.tokenHash).toBe(hashToken(token));
+    expect(a.invitedAt).toBeInstanceOf(Date);
+    // Later steps and cc recipients have no link yet.
+    expect(recipients.filter((r) => r.email !== "a@x.dev").map((r) => r.tokenHash)).toEqual([null, null]);
     const events = await withTenant(tenantId, (tx) => listAudit(tx, id));
     expect(events.at(-1)!.event).toBe("sent");
     expect((await withTenant(tenantId, (tx) => verifyChain(tx, id))).ok).toBe(true);
@@ -80,6 +87,14 @@ describe("sendEnvelope", () => {
     await expect(sendEnvelope({ tenantId, userId, envelopeId: noDoc, ...opts })).rejects.toThrow(/upload a PDF/i);
     const noFields = await ready({ withFields: false });
     await expect(sendEnvelope({ tenantId, userId, envelopeId: noFields, ...opts })).rejects.toThrow(/a@x.dev.*signature/);
+    expect(await admin.emailJob.count({ where: { envelopeId: { in: [noDoc, noFields] } } })).toBe(0);
+  });
+
+  it("queues no email when the send transaction rolls back", async () => {
+    const id = await ready();
+    // The second concurrent send fails after the first commits; only one set of invites exists.
+    await Promise.allSettled([sendEnvelope({ tenantId, userId, envelopeId: id, ...opts }), sendEnvelope({ tenantId, userId, envelopeId: id, ...opts })]);
+    expect(await admin.emailJob.count({ where: { envelopeId: id } })).toBe(1);
   });
 
   it("validates expiry and reminder options", async () => {
@@ -93,6 +108,9 @@ describe("sendEnvelope", () => {
     await sendEnvelope({ tenantId, userId, envelopeId: id, ...opts });
     await voidEnvelope({ tenantId, userId, envelopeId: id, reason: "Wrong terms" });
     expect((await getEnvelope(tenantId, id)).envelope).toMatchObject({ status: "voided", voidReason: "Wrong terms" });
+    // Only the signer who got a link hears about it.
+    const voided = await admin.emailJob.findMany({ where: { envelopeId: id, kind: "voided" } });
+    expect(voided.map((j) => [j.toEmail, (j.data as { reason: string }).reason])).toEqual([["a@x.dev", "Wrong terms"]]);
     await expect(voidEnvelope({ tenantId, userId, envelopeId: id, reason: "again" })).rejects.toThrow(/only sent/i);
   });
 });

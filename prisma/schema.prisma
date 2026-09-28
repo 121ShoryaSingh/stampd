@@ -193,6 +193,7 @@ model Envelope {
   recipients        Recipient[]
   fields            Field[]
   auditEvents       AuditEvent[]
+  emailJobs         EmailJob[]
 
   @@index([tenantId, status, createdAt])
   @@map("envelopes")
@@ -236,6 +237,7 @@ model Recipient {
   declinedAt     DateTime?       @map("declined_at") @db.Timestamptz
   declineReason  String?         @map("decline_reason")
   lastRemindedAt DateTime?       @map("last_reminded_at") @db.Timestamptz
+  invitedAt      DateTime?       @map("invited_at") @db.Timestamptz
   signIp         String?         @map("sign_ip")
   signUserAgent  String?         @map("sign_user_agent")
   createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz
@@ -288,4 +290,36 @@ model AuditEvent {
 
   @@unique([envelopeId, seq])
   @@map("audit_events")
+}
+
+enum EmailStatus {
+  queued
+  sent
+  failed
+
+  @@map("email_status")
+}
+
+// Transactional outbox: written with the state change, sent by the worker.
+model EmailJob {
+  id          String      @id @default(uuid(7)) @db.Uuid
+  tenantId    String      @map("tenant_id") @db.Uuid
+  envelopeId  String      @map("envelope_id") @db.Uuid
+  recipientId String?     @map("recipient_id") @db.Uuid
+  kind        String
+  toEmail     String      @map("to_email")
+  toName      String?     @map("to_name")
+  data        Json        @default("{}")
+  status      EmailStatus @default(queued)
+  attempts    Int         @default(0)
+  runAt       DateTime    @default(now()) @map("run_at") @db.Timestamptz
+  lockedUntil DateTime?   @map("locked_until") @db.Timestamptz
+  lastError   String?     @map("last_error")
+  sentAt      DateTime?   @map("sent_at") @db.Timestamptz
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  envelope    Envelope    @relation(fields: [envelopeId], references: [id], onDelete: Cascade)
+
+  @@index([status, runAt])
+  @@index([envelopeId])
+  @@map("email_jobs")
 }

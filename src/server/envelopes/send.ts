@@ -1,17 +1,11 @@
 import "server-only";
-import { randomBytes } from "node:crypto";
 import { withTenant } from "@/server/db/context";
 import { appendAudit } from "@/server/audit/service";
-import { hashToken } from "@/server/team/service";
-import { env } from "@/server/env";
 import { ValidationError } from "@/server/errors";
 import { lockDraft } from "./service";
+import { issueLink } from "./links";
 
 export type SendOptions = { expiresInDays: number; reminderEveryDays: number | null; message?: string | null };
-
-export function signingUrl(token: string) {
-  return `${env.BETTER_AUTH_URL}/sign/${token}`;
-}
 
 function checkOptions(o: SendOptions) {
   if (!Number.isInteger(o.expiresInDays) || o.expiresInDays < 1 || o.expiresInDays > 365) {
@@ -37,14 +31,7 @@ export async function sendEnvelope(i: { tenantId: string; userId: string; envelo
     }
     const firstStep = Math.min(...signers.map((s) => s.routingOrder));
     const now = new Date();
-    const links = [];
-    for (const r of recs) {
-      const token = randomBytes(32).toString("base64url");
-      const isFirst = r.role === "signer" && r.routingOrder === firstStep;
-      await tx.recipient.update({ where: { id: r.id }, data: { tokenHash: hashToken(token), status: isFirst ? "sent" : "pending" } });
-      links.push({ recipientId: r.id, email: r.email, name: r.name, routingOrder: r.routingOrder, url: signingUrl(token) });
-    }
-    await tx.envelope.update({
+    const envelope = await tx.envelope.update({
       where: { id: i.envelopeId },
       data: {
         status: "sent",
@@ -54,6 +41,10 @@ export async function sendEnvelope(i: { tenantId: string; userId: string; envelo
         message: o.message,
       },
     });
+    // Later steps get their link when their step starts (see advanceRouting).
+    const first = signers.filter((s) => s.routingOrder === firstStep);
+    await tx.recipient.updateMany({ where: { id: { in: first.map((s) => s.id) } }, data: { status: "sent" } });
+    for (const r of first) await issueLink(tx, envelope, r, "invite", now);
     await appendAudit(tx, {
       tenantId: i.tenantId,
       envelopeId: i.envelopeId,
@@ -62,6 +53,6 @@ export async function sendEnvelope(i: { tenantId: string; userId: string; envelo
       event: "sent",
       data: { documentSha256: doc.sha256, signers: signers.length, expiresInDays: o.expiresInDays, reminderEveryDays: o.reminderEveryDays },
     });
-    return links;
+    return { invited: first.length };
   });
 }

@@ -10,7 +10,6 @@ import { Input } from "@/components/ui/input";
 export function CodeStep({ token, email }: { token: string; email: string }) {
   const router = useRouter();
   const [sent, setSent] = useState(false);
-  const [devCode, setDevCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -21,7 +20,6 @@ export function CodeStep({ token, email }: { token: string; email: string }) {
     setBusy(false);
     if (res.error) return setError(res.error);
     setSent(true);
-    setDevCode(res.devCode ?? null);
   }
 
   async function verify(form: FormData) {
@@ -36,8 +34,10 @@ export function CodeStep({ token, email }: { token: string; email: string }) {
   return (
     <Card className="mx-auto max-w-md">
       <h1 className="font-display text-3xl">Enter your code</h1>
-      <p className="mt-2">
-        We will send a 6-digit code to <b>{email}</b> to confirm it is you.
+      <p className="mt-2" role={sent ? "status" : undefined}>
+        {sent ? "We emailed a 6-digit code to " : "We will email a 6-digit code to "}
+        <b>{email}</b>
+        {sent ? ". It can take a minute to arrive." : " to confirm it is you."}
       </p>
       {!sent ? (
         <Button variant="primary" className="mt-6 w-full justify-center" onClick={send} disabled={busy}>
@@ -45,11 +45,6 @@ export function CodeStep({ token, email }: { token: string; email: string }) {
         </Button>
       ) : (
         <form action={verify} className="mt-6 space-y-4">
-          {devCode && (
-            <p className="border-brutal bg-yellow p-2 font-mono text-sm">
-              Dev only (email arrives in a later plan): your code is <b data-testid="dev-code">{devCode}</b>
-            </p>
-          )}
           <Input label="Code" name="code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} required />
           <Button variant="primary" className="w-full justify-center" disabled={busy}>
             {busy ? "Checking..." : "Verify"}

@@ -8,8 +8,6 @@ import { deleteDraft, finalizeUpload, voidEnvelope } from "@/server/envelopes/se
 import { sendEnvelope } from "@/server/envelopes/send";
 import { DomainError } from "@/server/errors";
 
-type Links = { email: string; name: string; routingOrder: number; url: string }[];
-
 async function guard<T>(fn: () => Promise<T>): Promise<{ error?: string; data?: T }> {
   try {
     return { data: await fn() };
@@ -27,7 +25,7 @@ export async function finalizeUploadAction(envelopeId: string, key: string, file
   return { error: res.error };
 }
 
-export async function sendAction(_prev: { error?: string; links?: Links }, form: FormData): Promise<{ error?: string; links?: Links }> {
+export async function sendAction(_prev: { error?: string; invited?: number }, form: FormData): Promise<{ error?: string; invited?: number }> {
   const { session, tenant } = await requireTenant();
   const p = z
     .object({
@@ -53,9 +51,9 @@ export async function sendAction(_prev: { error?: string; links?: Links }, form:
       message: p.data.message,
     }),
   );
-  // No revalidate here: the form must stay mounted to show the one-time links; "Done" refreshes.
   if (res.error) return { error: res.error };
-  return { links: res.data!.map(({ email, name, routingOrder, url }) => ({ email, name, routingOrder, url })) };
+  revalidatePath(`/envelopes/${p.data.envelopeId}`);
+  return { invited: res.data!.invited };
 }
 
 export async function voidAction(form: FormData) {

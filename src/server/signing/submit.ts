@@ -4,6 +4,8 @@ import type { Tx } from "@/server/db/context";
 import { appendAudit } from "@/server/audit/service";
 import { lockEnvelope } from "@/server/envelopes/service";
 import { deleteObject, putObject } from "@/server/storage/storage";
+import { enqueueEmail } from "@/server/email/outbox";
+import { envelopeUrl, issueLink, senderOf } from "@/server/envelopes/links";
 import { InvalidStateError, ValidationError } from "@/server/errors";
 import { inTenant, signerState, type ReqMeta, type SignerRef } from "./access";
 import { requireSignerSession } from "./service";
@@ -32,14 +34,25 @@ async function advanceRouting(tx: Tx, ref: SignerRef, meta: ReqMeta) {
   const signers = await tx.recipient.findMany({ where: { envelopeId: ref.envelopeId, role: "signer" } });
   const open = signers.filter((s) => s.status !== "signed");
   if (open.length === 0) {
-    await tx.envelope.update({ where: { id: ref.envelopeId }, data: { status: "completed", completedAt: new Date() } });
+    const env = await tx.envelope.update({ where: { id: ref.envelopeId }, data: { status: "completed", completedAt: new Date() } });
     await appendAudit(tx, { ...event(ref, "completed", meta), actorType: "system", actorId: null });
+    const sender = await senderOf(tx, env);
+    await enqueueEmail(tx, {
+      tenantId: ref.tenantId,
+      envelopeId: ref.envelopeId,
+      kind: "completed",
+      toEmail: sender.email,
+      toName: sender.name,
+      data: { title: env.title, envelopeUrl: envelopeUrl(env.id) },
+    });
     return { envelopeStatus: "completed" as const, nextStepStarted: false };
   }
   const step = Math.min(...open.map((s) => s.routingOrder));
   const toStart = open.filter((s) => s.routingOrder === step && s.status === "pending");
   if (toStart.length > 0 && toStart.length === open.filter((s) => s.routingOrder === step).length) {
     await tx.recipient.updateMany({ where: { id: { in: toStart.map((s) => s.id) } }, data: { status: "sent" } });
+    const env = await tx.envelope.findUniqueOrThrow({ where: { id: ref.envelopeId } });
+    for (const r of toStart) await issueLink(tx, env, r, "invite");
     await appendAudit(tx, { ...event(ref, "step_started", meta, { step, recipients: toStart.map((s) => s.email) }), actorType: "system", actorId: null });
     return { envelopeStatus: "sent" as const, nextStepStarted: true };
   }
@@ -115,7 +128,17 @@ export async function declineSigning(token: string, session: string | undefined,
       data: { status: "declined", declinedAt: new Date(), declineReason: why },
     });
     if (claimed.count === 0) throw new InvalidStateError("This envelope is closed");
-    await tx.envelope.update({ where: { id: ref.envelopeId }, data: { status: "declined" } });
+    const env = await tx.envelope.update({ where: { id: ref.envelopeId }, data: { status: "declined" } });
     await appendAudit(tx, event(ref, "declined", meta, { reason: why }));
+    const rec = await tx.recipient.findUniqueOrThrow({ where: { id: ref.recipientId } });
+    const sender = await senderOf(tx, env);
+    await enqueueEmail(tx, {
+      tenantId: ref.tenantId,
+      envelopeId: ref.envelopeId,
+      kind: "declined",
+      toEmail: sender.email,
+      toName: sender.name,
+      data: { title: env.title, signerName: rec.name, signerEmail: rec.email, reason: why, envelopeUrl: envelopeUrl(env.id) },
+    });
   });
 }
