@@ -8,6 +8,8 @@
   --color-pink: #ff8ad8;
   --color-green: #00d26a;
   --color-blue: #2f5bff;
+  /* Red for text on white; brand red is too light for small text (AA). */
+  --color-red-ink: #c42e00;
   --font-display: var(--font-archivo-black), sans-serif;
   --font-sans: var(--font-space-grotesk), sans-serif;
   --font-mono: var(--font-jetbrains-mono), monospace;

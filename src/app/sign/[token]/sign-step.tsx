@@ -189,23 +189,20 @@ export function SignStep({ token, view }: { token: string; view: View }) {
         </div>
       </Modal>
 
-      {declining && (
-        <div role="dialog" aria-label="Decline to sign" className="fixed inset-0 z-50 grid place-items-center bg-ink/60 p-4">
-          <form action={decline} className="border-brutal shadow-hard w-full max-w-md space-y-3 bg-paper p-4">
-            <h2 className="font-display text-2xl">Decline to sign</h2>
-            <label className="block">
-              <span className="mb-1 block font-mono text-xs font-bold uppercase">Reason</span>
-              <textarea name="reason" required maxLength={500} rows={3} placeholder="Enter reason" className="border-brutal w-full p-2" />
-            </label>
-            <div className="flex justify-end gap-2">
-              <Button type="button" onClick={() => setDeclining(false)}>
-                Cancel
-              </Button>
-              <Button variant="primary">Decline</Button>
-            </div>
-          </form>
-        </div>
-      )}
+      <Modal open={declining} onClose={() => setDeclining(false)} title="Decline to sign">
+        <form action={decline} className="space-y-3">
+          <label className="block">
+            <span className="mb-1 block font-mono text-xs font-bold uppercase">Reason</span>
+            <textarea name="reason" required maxLength={500} rows={3} placeholder="Enter reason" className="border-brutal w-full p-2" />
+          </label>
+          <div className="flex justify-end gap-2">
+            <Button type="button" onClick={() => setDeclining(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary">Decline</Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

@@ -89,6 +89,21 @@ export function FieldEditor(props: { envelopeId: string; pdfUrl: string; pageSiz
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
 
+  // App Router links skip beforeunload, so confirm in-app navigation too.
+  useEffect(() => {
+    if (!dirty) return;
+    const onClick = (e: MouseEvent) => {
+      const link = (e.target as HTMLElement).closest("a[href]") as HTMLAnchorElement | null;
+      if (!link || link.target === "_blank" || e.defaultPrevented) return;
+      if (!confirm("You have unsaved field changes. Leave without saving?")) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, [dirty]);
+
   // Keyboard: nudge, duplicate, delete, deselect.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -297,7 +312,7 @@ export function FieldEditor(props: { envelopeId: string; pdfUrl: string; pageSiz
         <Button variant="primary" type="button" onClick={save} className="w-full justify-center">
           Save fields
         </Button>
-        <p className={`font-mono text-xs font-bold ${dirty ? "text-red" : ""}`}>{dirty ? "Unsaved changes" : "All changes saved"}</p>
+        <p className={`font-mono text-xs font-bold ${dirty ? "text-red-ink" : ""}`}>{dirty ? "Unsaved changes" : "All changes saved"}</p>
         {msg.error && <p role="alert" className="border-brutal bg-red p-2 text-sm font-bold text-ink">{msg.error}</p>}
         {msg.ok && <p role="status" className="border-brutal bg-green p-2 text-sm font-bold">{msg.ok}</p>}
       </aside>

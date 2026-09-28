@@ -16,7 +16,7 @@ export function FieldShell({ id, label, hint, error, children }: { id: string; l
         </p>
       )}
       {error && (
-        <p id={`${id}-error`} className="mt-1 text-xs font-bold text-red">
+        <p id={`${id}-error`} className="mt-1 text-xs font-bold text-red-ink">
           {error}
         </p>
       )}

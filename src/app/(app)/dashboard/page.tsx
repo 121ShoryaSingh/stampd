@@ -9,9 +9,13 @@ import { EmptyState, PageHeader, StatTile, Table, THead, TRow, TH, TD } from "@/
 const TABS: (EnvelopeStatus | "all")[] = ["all", "draft", "sent", "completed", "declined", "voided", "expired"];
 const fmt = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : "-");
 
-export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ status?: string; q?: string }> }) {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { tenant } = await requireTenant();
-  const { status, q } = await searchParams;
+  const sp = await searchParams;
+  // Repeated query params arrive as arrays; only accept a single string.
+  const one = (v: string | string[] | undefined) => (typeof v === "string" ? v : undefined);
+  const status = one(sp.status);
+  const q = one(sp.q);
   const active = (TABS as string[]).includes(status ?? "") ? (status as EnvelopeStatus | "all") : "all";
   const [rows, counts] = await Promise.all([
     listEnvelopes(tenant.tenantId, { ...(active === "all" ? {} : { status: active }), q }),
