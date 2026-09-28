@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { saveRecipientsAction } from "./actions";
+import { ArrowDown, ArrowUp, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 type Row = { name: string; email: string; role: "signer" | "cc"; routingOrder: number };
@@ -12,6 +13,15 @@ export function RecipientsForm({ envelopeId, initial }: { envelopeId: string; in
   const [rows, setRows] = useState<Row[]>(initial.length ? initial : [{ name: "", email: "", role: "signer", routingOrder: 1 }]);
   const [msg, setMsg] = useState<{ ok?: string; error?: string }>({});
   const [busy, setBusy] = useState(false);
+  // Swaps two rows and their signing order, so the list order matches who signs first.
+  const move = (i: number, d: -1 | 1) =>
+    setRows((rs) => {
+      const j = i + d;
+      if (j < 0 || j >= rs.length) return rs;
+      const next = [...rs];
+      [next[i], next[j]] = [{ ...rs[j], routingOrder: rs[i].routingOrder }, { ...rs[i], routingOrder: rs[j].routingOrder }];
+      return next;
+    });
   const update = (i: number, patch: Partial<Row>) => setRows((r) => r.map((row, j) => (j === i ? { ...row, ...patch } : row)));
 
   async function save() {
@@ -26,7 +36,7 @@ export function RecipientsForm({ envelopeId, initial }: { envelopeId: string; in
   return (
     <div className="space-y-3">
       {rows.map((r, i) => (
-        <div key={i} className="grid grid-cols-[1fr_1.4fr_7rem_5rem_auto] items-end gap-2">
+        <div key={i} className="border-brutal rise grid grid-cols-1 gap-2 bg-paper p-2 sm:grid-cols-[1fr_1.4fr_7rem_5rem_auto]" style={{ "--i": i } as React.CSSProperties}>
           <input aria-label={`Recipient ${i + 1} name`} placeholder="Enter name" value={r.name} onChange={(e) => update(i, { name: e.target.value })} className="border-brutal px-2 py-2" />
           <input
             aria-label={`Recipient ${i + 1} email`}
@@ -49,9 +59,17 @@ export function RecipientsForm({ envelopeId, initial }: { envelopeId: string; in
             onChange={(e) => update(i, { routingOrder: Number(e.target.value) })}
             className="border-brutal px-2 py-2"
           />
-          <button type="button" aria-label={`Remove recipient ${i + 1}`} onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))} className="border-brutal px-3 py-2 font-bold">
-            x
-          </button>
+          <div className="flex gap-1">
+            <button type="button" aria-label={`Move recipient ${i + 1} up`} disabled={i === 0} onClick={() => move(i, -1)} className="border-brutal p-2 disabled:opacity-30">
+              <ArrowUp aria-hidden className="h-4 w-4" />
+            </button>
+            <button type="button" aria-label={`Move recipient ${i + 1} down`} disabled={i === rows.length - 1} onClick={() => move(i, 1)} className="border-brutal p-2 disabled:opacity-30">
+              <ArrowDown aria-hidden className="h-4 w-4" />
+            </button>
+            <button type="button" aria-label={`Remove recipient ${i + 1}`} onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))} className="border-brutal p-2">
+              <X aria-hidden className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       ))}
       <p className="font-mono text-xs">Same order number = sign in parallel. Lower numbers sign first.</p>

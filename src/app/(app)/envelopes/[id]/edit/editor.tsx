@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Calendar, CheckSquare, Crosshair, GripVertical, PenLine, Signature, TextCursorInput } from "lucide-react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { PdfCanvas } from "@/components/pdf/pdf-canvas";
 import { saveFieldsAction } from "./actions";
@@ -15,12 +16,12 @@ type PageSize = { w: number; h: number };
 type FieldDrag = { kind: "field"; key: string; handle: Handle | "move"; startX: number; startY: number; orig: Box; pageW: number; pageH: number };
 type PaletteDrag = { kind: "palette"; type: FieldKind; startX: number; startY: number; x: number; y: number; moved: boolean };
 
-const KINDS: { type: FieldKind; label: string }[] = [
-  { type: "signature", label: "Signature" },
-  { type: "initials", label: "Initials" },
-  { type: "date", label: "Date" },
-  { type: "text", label: "Text" },
-  { type: "checkbox", label: "Checkbox" },
+const KINDS: { type: FieldKind; label: string; Icon: typeof PenLine }[] = [
+  { type: "signature", label: "Signature", Icon: Signature },
+  { type: "initials", label: "Initials", Icon: PenLine },
+  { type: "date", label: "Date", Icon: Calendar },
+  { type: "text", label: "Text", Icon: TextCursorInput },
+  { type: "checkbox", label: "Checkbox", Icon: CheckSquare },
 ];
 const HANDLES: { h: Handle; cls: string }[] = [
   { h: "nw", cls: "-left-1.5 -top-1.5 cursor-nwse-resize" },
@@ -33,14 +34,22 @@ const HANDLES: { h: Handle; cls: string }[] = [
   { h: "w", cls: "-left-1.5 top-1/2 -translate-y-1/2 cursor-ew-resize" },
 ];
 const COLORS = ["#FFE600", "#FF8AD8", "#00D26A", "#7FA8FF", "#FF9A6B"];
-const PAGE_W = 760;
+const BASE_W = 760;
+const ZOOMS = [75, 100, 125];
 const ALIGN_PX = 5;
 const NO_GUIDES: Guides = { v: [], h: [] };
 
 export function FieldEditor(props: { envelopeId: string; pdfUrl: string; pageSizes: PageSize[]; recipients: Recipient[]; initial: EditorField[] }) {
   const signers = props.recipients.filter((r) => r.role === "signer");
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
-  const [allFields, setFields] = useState<EditorField[]>(props.initial);
+  const [allFields, setAllFields] = useState<EditorField[]>(props.initial);
+  const [dirty, setDirty] = useState(false);
+  const [zoom, setZoom] = useState(100);
+  const PAGE_W = (BASE_W * zoom) / 100;
+  const setFields = (u: React.SetStateAction<EditorField[]>) => {
+    setAllFields(u);
+    setDirty(true);
+  };
   const fields = pruneOrphanFields(allFields, signers.map((s) => s.id));
   const [tool, setTool] = useState<FieldKind | null>(null);
   const [picked, setAssignee] = useState(signers[0]?.id ?? "");
@@ -69,6 +78,14 @@ export function FieldEditor(props: { envelopeId: string; pdfUrl: string; pageSiz
       alive = false;
     };
   }, [props.pdfUrl]);
+
+  // Warn before leaving with unsaved field changes.
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
 
   // Keyboard: nudge, duplicate, delete, deselect.
   useEffect(() => {
@@ -176,7 +193,9 @@ export function FieldEditor(props: { envelopeId: string; pdfUrl: string; pageSiz
       props.envelopeId,
       fields.map(({ key: _key, ...f }) => f),
     );
-    setMsg(res.error ? { error: res.error } : { ok: `Saved ${res.count} fields` });
+    if (res.error) return setMsg({ error: res.error });
+    setMsg({ ok: `Saved ${res.count} fields` });
+    setDirty(false);
   }
 
   if (signers.length === 0) {
@@ -206,11 +225,27 @@ export function FieldEditor(props: { envelopeId: string; pdfUrl: string; pageSiz
               onPointerDown={(e) => startPaletteDrag(e, k.type)}
               className={`border-brutal flex touch-none select-none items-center justify-between px-3 py-2 text-left font-bold ${tool === k.type ? "bg-ink text-paper" : "bg-paper hover:bg-yellow"}`}
             >
-              {k.label}
-              <span aria-hidden className="font-mono text-xs opacity-60">::</span>
+              <span className="flex items-center gap-2">
+                <k.Icon aria-hidden className="h-4 w-4" />
+                {k.label}
+              </span>
+              <GripVertical aria-hidden className="h-4 w-4 opacity-50" />
             </button>
           ))}
         </div>
+        {tool && (
+          <Button type="button" size="sm" className="w-full justify-center" icon={<Crosshair aria-hidden className="h-4 w-4" />} onClick={() => addField(tool, sel?.page ?? 1, 0.5, 0.5)}>
+            Place at center
+          </Button>
+        )}
+        <ul aria-label="Signer colors" className="space-y-1 text-sm">
+          {signers.map((s) => (
+            <li key={s.id} className="flex items-center gap-2">
+              <span aria-hidden className="border-brutal h-3 w-3" style={{ background: color(s.id) }} />
+              {s.name}
+            </li>
+          ))}
+        </ul>
         <p className="font-mono text-xs">Drag a field onto the page, or pick one and click. Arrows nudge, Shift+arrows move 4 cells, Alt for fine moves, Ctrl+D duplicates, Delete removes.</p>
         <div className="border-brutal space-y-1 p-2 font-mono text-xs font-bold uppercase">
           <label className="flex items-center gap-2">
@@ -218,6 +253,16 @@ export function FieldEditor(props: { envelopeId: string; pdfUrl: string; pageSiz
           </label>
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} /> Snap to grid
+          </label>
+          <label className="flex items-center justify-between gap-2">
+            Zoom
+            <select aria-label="Zoom" value={zoom} onChange={(e) => setZoom(Number(e.target.value))} className="border-brutal bg-paper px-1 py-0.5">
+              {ZOOMS.map((z) => (
+                <option key={z} value={z}>
+                  {z}%
+                </option>
+              ))}
+            </select>
           </label>
         </div>
         {sel && (
@@ -245,11 +290,12 @@ export function FieldEditor(props: { envelopeId: string; pdfUrl: string; pageSiz
         <Button variant="primary" type="button" onClick={save} className="w-full justify-center">
           Save fields
         </Button>
+        <p className={`font-mono text-xs font-bold ${dirty ? "text-red" : ""}`}>{dirty ? "Unsaved changes" : "All changes saved"}</p>
         {msg.error && <p role="alert" className="border-brutal bg-red p-2 text-sm font-bold text-white">{msg.error}</p>}
         {msg.ok && <p role="status" className="border-brutal bg-green p-2 text-sm font-bold">{msg.ok}</p>}
       </aside>
 
-      <div className="space-y-6">
+      <div className="min-w-0 space-y-6 overflow-x-auto">
         {!doc && <p className="font-mono">Loading PDF...</p>}
         {doc &&
           props.pageSizes.map((ps, i) => {

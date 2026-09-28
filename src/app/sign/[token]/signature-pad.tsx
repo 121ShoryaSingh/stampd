@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/modal";
 
 const W = 600;
 const H = 200;
@@ -63,8 +64,8 @@ export function SignaturePad({ kind, defaultName, onAdopt, onCancel }: { kind: "
   }
 
   return (
-    <div role="dialog" aria-label={`Adopt your ${kind}`} className="fixed inset-0 z-50 grid place-items-center bg-ink/60 p-4">
-      <div className="border-brutal shadow-hard w-full max-w-2xl bg-paper p-4">
+    <Modal open onClose={onCancel} title={`Adopt your ${kind}`}>
+      <div>
         <div className="mb-3 flex gap-2">
           {(["draw", "type", "upload"] as Mode[]).map((m) => (
             <button
@@ -126,7 +127,7 @@ export function SignaturePad({ kind, defaultName, onAdopt, onCancel }: { kind: "
           </Button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 

@@ -63,3 +63,30 @@ test("a click on a palette item still picks the click-to-place tool", async ({ p
   await page.getByRole("button", { name: "Save fields" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Saved 1 fields" })).toBeVisible();
 });
+
+test("keyboard placement, zoom and unsaved indicator", async ({ page }) => {
+  await readyEditor(page);
+  await page.getByRole("button", { name: "Text" }).click();
+  await page.getByRole("button", { name: "Place at center" }).click();
+  await expect(page.getByRole("button", { name: "text field" })).toBeVisible();
+  await expect(page.getByText("Unsaved changes")).toBeVisible();
+
+  const before = (await page.getByTestId("page-1").boundingBox())!.width;
+  await page.getByLabel("Zoom").selectOption("125");
+  const after = (await page.getByTestId("page-1").boundingBox())!.width;
+  expect(after / before).toBeGreaterThan(1.2);
+
+  await page.getByRole("button", { name: "Save fields" }).click();
+  await expect(page.getByText("All changes saved")).toBeVisible();
+});
+
+test("recipients can be reordered with buttons", async ({ page }) => {
+  await readyEditor(page);
+  await page.getByRole("button", { name: "Add recipient" }).click();
+  await page.getByLabel("Recipient 2 name").fill("Zed Last");
+  await page.getByLabel("Recipient 2 email").fill("zed@e2e.dev");
+  await page.getByRole("button", { name: "Move recipient 2 up" }).click();
+  await expect(page.getByLabel("Recipient 1 name")).toHaveValue("Zed Last");
+  await expect(page.getByLabel("Recipient 1 order")).toHaveValue("1");
+  await expect(page.getByLabel("Recipient 2 order")).toHaveValue("2");
+});

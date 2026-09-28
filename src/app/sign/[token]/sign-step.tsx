@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { PdfCanvas } from "@/components/pdf/pdf-canvas";
 import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/modal";
 import { submitAction, declineAction } from "./actions";
 import { SignaturePad } from "./signature-pad";
 
@@ -19,6 +20,7 @@ export function SignStep({ token, view }: { token: string; view: View }) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [pad, setPad] = useState<"signature" | "initials" | null>(null);
   const [declining, setDeclining] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const refs = useRef<Record<string, HTMLElement | null>>({});
@@ -54,6 +56,7 @@ export function SignStep({ token, view }: { token: string; view: View }) {
   }
 
   async function finish() {
+    setConfirming(false);
     setBusy(true);
     setError(null);
     const res = await submitAction(token, { values, signaturePng: images.signature, initialsPng: images.initials });
@@ -139,13 +142,18 @@ export function SignStep({ token, view }: { token: string; view: View }) {
 
       <div className="fixed inset-x-0 bottom-0 z-40 border-t-[2.5px] border-ink bg-paper p-3">
         <div className="mx-auto flex max-w-4xl flex-wrap items-center gap-3">
-          <span className="font-mono text-sm font-bold">
-            {done} of {required.length} required
-          </span>
+          <div className="flex min-w-40 flex-1 items-center gap-2">
+            <div className="border-brutal h-3 flex-1 bg-paper" aria-hidden>
+              <div className="h-full bg-green transition-all" style={{ width: `${required.length ? (done / required.length) * 100 : 100}%` }} />
+            </div>
+            <span className="font-mono text-sm font-bold">
+              {done} of {required.length} required
+            </span>
+          </div>
           <Button type="button" onClick={next} disabled={complete}>
             Next field
           </Button>
-          <Button type="button" variant="primary" onClick={finish} disabled={!complete || busy}>
+          <Button type="button" variant="primary" size="lg" onClick={() => setConfirming(true)} disabled={!complete || busy} loading={busy}>
             {busy ? "Finishing..." : "Finish"}
           </Button>
           <button type="button" className="ml-auto font-bold underline" onClick={() => setDeclining(true)}>
@@ -166,6 +174,20 @@ export function SignStep({ token, view }: { token: string; view: View }) {
           }}
         />
       )}
+
+      <Modal open={confirming} onClose={() => setConfirming(false)} title="Finish signing">
+        <p>
+          You are signing <b>{view.title}</b> as <b>{view.name}</b>. Your signature, the date and your answers will be recorded with your IP address and device.
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button type="button" onClick={() => setConfirming(false)}>
+            Review again
+          </Button>
+          <Button type="button" variant="primary" onClick={finish}>
+            Sign and finish
+          </Button>
+        </div>
+      </Modal>
 
       {declining && (
         <div role="dialog" aria-label="Decline to sign" className="fixed inset-0 z-50 grid place-items-center bg-ink/60 p-4">

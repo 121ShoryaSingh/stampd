@@ -26,10 +26,11 @@ async function signAs(page: Page) {
   await page.mouse.down();
   for (let i = 1; i <= 10; i++) await page.mouse.move(b.x + 40 + i * 30, b.y + b.height * (i % 2 ? 0.35 : 0.65));
   await page.mouse.up();
-  await page.getByRole("button", { name: "Adopt signature" }).click();
+  await page.getByRole("dialog", { name: "Adopt your signature" }).getByRole("button", { name: "Adopt signature" }).click();
   await expect(page.getByRole("img", { name: "Your signature" })).toBeVisible();
 
   await page.getByRole("button", { name: "Finish" }).click();
+  await page.getByRole("dialog", { name: "Finish signing" }).getByRole("button", { name: "Sign and finish" }).click();
   await expect(page.getByRole("heading", { name: "All done" })).toBeVisible();
 }
 
