@@ -1,12 +1,11 @@
 import { requireTenant } from "@/server/tenants/current";
-import { Sidebar } from "@/components/app/sidebar";
+import { AppShell } from "@/components/app/shell";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const { session, tenant, tenants } = await requireTenant();
   return (
-    <div className="flex min-h-screen">
-      <Sidebar tenants={tenants} active={tenant} userEmail={session.user.email} />
-      <main className="flex-1 bg-[#FAFAFA] p-8">{children}</main>
-    </div>
+    <AppShell tenants={tenants} active={tenant} user={{ name: session.user.name, email: session.user.email }}>
+      {children}
+    </AppShell>
   );
 }

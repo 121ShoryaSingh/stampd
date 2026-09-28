@@ -9,7 +9,7 @@ export function InviteForm() {
   const [state, action, pending] = useActionState(inviteAction, {});
   return (
     <form action={action} className="flex flex-wrap items-end gap-3">
-      <div className="min-w-64 flex-1">
+      <div className="min-w-0 flex-1 basis-56">
         <Input label="Email" name="email" type="email" required />
       </div>
       <label className="block">

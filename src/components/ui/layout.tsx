@@ -39,7 +39,7 @@ export function Skeleton({ className = "" }: { className?: string }) {
 
 export function Table({ className = "", ...p }: HTMLAttributes<HTMLTableElement>) {
   return (
-    <div className="border-brutal shadow-hard overflow-x-auto bg-paper">
+    <div className="border-brutal shadow-hard relative overflow-x-auto bg-paper">
       <table className={`w-full text-left ${className}`} {...p} />
     </div>
   );
