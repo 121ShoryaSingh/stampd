@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #000000;
+  --color-paper: #ffffff;
+  --color-yellow: #ffe600;
+  --color-red: #ff3d00;
+  --color-pink: #ff8ad8;
+  --color-green: #00d26a;
+  --font-display: var(--font-archivo-black), sans-serif;
+  --font-sans: var(--font-space-grotesk), sans-serif;
+  --font-mono: var(--font-jetbrains-mono), monospace;
+  --radius: 0px;
+}
+
+@utility border-brutal { border: 2.5px solid var(--color-ink); }
+@utility shadow-hard { box-shadow: 6px 6px 0 var(--color-ink); }
+@utility shadow-hard-sm { box-shadow: 4px 4px 0 var(--color-ink); }
+
+body { background: var(--color-paper); color: var(--color-ink); font-family: var(--font-sans); }
