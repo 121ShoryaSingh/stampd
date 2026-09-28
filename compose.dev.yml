@@ -7,5 +7,13 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
+  s3:
+    image: rustfs/rustfs:latest
+    environment:
+      RUSTFS_ACCESS_KEY: stampd
+      RUSTFS_SECRET_KEY: stampd-s3-secret
+    ports: ["127.0.0.1:9100:9000"]
+    volumes: [s3data:/data]
 volumes:
   pgdata:
+  s3data:
