@@ -1,3 +1,8 @@
+import type { Metadata } from "next";
+
+// Signing tokens live in the URL, so never leak them via Referer; keep signer pages out of search.
+export const metadata: Metadata = { referrer: "no-referrer", robots: { index: false, follow: false } };
+
 // Public signer area: no app sidebar and no sender session.
 export default function SignLayout({ children }: { children: React.ReactNode }) {
   return (

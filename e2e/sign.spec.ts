@@ -43,6 +43,8 @@ test("two signers sign in order and the envelope completes", async ({ page, brow
 
   const second = await signerPage(browser, link2);
   await expect(second.getByRole("heading", { name: "Waiting for others" })).toBeVisible();
+  // Signing tokens live in the URL, so the page must never send it as a Referer.
+  await expect(second.locator('meta[name="referrer"]')).toHaveAttribute("content", "no-referrer");
 
   const first = await signerPage(browser, link1);
   await signAs(first);
