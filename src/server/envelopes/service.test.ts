@@ -168,6 +168,12 @@ describe("envelope drafts", () => {
     expect((await countByStatus(otherTenant)).draft).toBeGreaterThanOrEqual(1);
   });
 
+  it("searches titles case-insensitively", async () => {
+    const { id } = await createEnvelope({ tenantId: otherTenant, userId, title: "Quarterly Lease Renewal" });
+    expect((await listEnvelopes(otherTenant, { q: "lease ren" })).map((e) => e.id)).toContain(id);
+    expect(await listEnvelopes(otherTenant, { q: "zzz-nothing" })).toHaveLength(0);
+  });
+
   it("deletes drafts but refuses to void a draft", async () => {
     const { id } = await createEnvelope({ tenantId, userId, title: "Gone" });
     await expect(voidEnvelope({ tenantId, userId, envelopeId: id, reason: "x" })).rejects.toThrow(/only sent/i);

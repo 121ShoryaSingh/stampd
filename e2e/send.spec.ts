@@ -45,7 +45,7 @@ test("create an envelope, upload, add a signer, place a field, send", async ({ p
   await expect(page.getByRole("button", { name: "Void envelope" })).toBeVisible();
 
   await page.goto("/dashboard?status=sent");
-  await expect(page.getByRole("link", { name: "E2E Contract" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "E2E Contract", exact: true })).toBeVisible();
 });
 
 test("a text file renamed to .pdf is rejected", async ({ page }) => {

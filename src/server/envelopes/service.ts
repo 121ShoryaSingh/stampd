@@ -123,10 +123,11 @@ export async function getEnvelope(tenantId: string, envelopeId: string) {
   };
 }
 
-export async function listEnvelopes(tenantId: string, filter: { status?: EnvelopeStatus } = {}) {
+export async function listEnvelopes(tenantId: string, filter: { status?: EnvelopeStatus; q?: string } = {}) {
+  const q = filter.q?.trim().slice(0, 100);
   const rows = await withTenant(tenantId, (tx) =>
     tx.envelope.findMany({
-      where: filter.status ? { status: filter.status } : {},
+      where: { ...(filter.status ? { status: filter.status } : {}), ...(q ? { title: { contains: q, mode: "insensitive" as const } } : {}) },
       orderBy: { createdAt: "desc" },
       take: 200,
       select: {
