@@ -2,6 +2,9 @@ import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { settle } from "./helpers";
 
+// Contrast is checked on final colors: entrance fades are off under reduced motion (motion.spec.ts covers motion).
+test.use({ reducedMotion: "reduce" });
+
 const PAGES = [
   { path: "/security", heading: "Security" },
   { path: "/terms", heading: "Terms of service" },

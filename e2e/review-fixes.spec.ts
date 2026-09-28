@@ -3,6 +3,9 @@ import AxeBuilder from "@axe-core/playwright";
 import { createAndSend, enterCode, newUser, settle, signUpWithWorkspace } from "./helpers";
 import { signingCode } from "./mail";
 
+// Contrast is checked on final colors: entrance fades are off under reduced motion (motion.spec.ts covers motion).
+test.use({ reducedMotion: "reduce" });
+
 async function toSignStep(page: Page, email: string) {
   await enterCode(page, email);
   await page.getByRole("checkbox").check();
