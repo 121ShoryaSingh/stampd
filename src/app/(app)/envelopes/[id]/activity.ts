@@ -16,6 +16,10 @@ const WORDS: Record<string, (who: string) => string> = {
   completed: () => "Everyone signed",
   voided: () => "Envelope voided",
   expired: () => "Envelope expired",
+  email_sent: () => "Email sent",
+  email_failed: () => "An email could not be delivered",
+  reminded: () => "Reminder sent",
+  link_reissued: () => "Signing link sent again",
 };
 
 export function describeEvent(event: string, who: string) {
