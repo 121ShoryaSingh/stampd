@@ -10,6 +10,7 @@ import { InvalidStateError, ValidationError } from "@/server/errors";
 import { inTenant, signerState, type ReqMeta, type SignerRef } from "./access";
 import { requireSignerSession } from "./service";
 import { decodePng } from "./png";
+import { unsupportedChars } from "@/server/finalize/fonts";
 
 export type SubmitInput = { values: Record<string, string>; signaturePng?: string; initialsPng?: string };
 
@@ -75,6 +76,11 @@ export async function submitSigning(token: string, session: string | undefined, 
       const v = (raw ?? "").trim();
       if (v.length > MAX_TEXT) throw new ValidationError(`Text fields can have at most ${MAX_TEXT} characters`);
       if (f.required && !v) throw new ValidationError("Please fill in every required field");
+      // The signed PDF must show exactly what was typed; refuse what its font cannot draw.
+      const bad = unsupportedChars(v);
+      if (bad.length > 0) {
+        throw new ValidationError(`Text fields accept Latin, Greek and Cyrillic letters. Please remove: ${bad.slice(0, 5).join(" ")}`);
+      }
       values.set(f.id, v || null);
     } else if (f.type === "checkbox") {
       const v = raw === "true" ? "true" : "false";

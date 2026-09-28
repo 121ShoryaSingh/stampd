@@ -118,6 +118,8 @@ describe("submitSigning", () => {
     await expect(submitSigning(s.links[0].token!, sessionA, { ...base, values: { [mine.id]: "ok", [theirs.id]: "x" } }, meta)).rejects.toThrow(/not yours/);
     await expect(submitSigning(s.links[0].token!, sessionA, { ...base, values: { [mine.id]: "x".repeat(501) } }, meta)).rejects.toThrow(/500/);
     await expect(submitSigning(s.links[0].token!, sessionA, { ...base, values: {} }, meta)).rejects.toThrow(/required/);
+    // The sealed PDF could not show these characters, so they are refused instead of printed as "?".
+    await expect(submitSigning(s.links[0].token!, sessionA, { ...base, values: { [mine.id]: "李 明 Ltd" } }, meta)).rejects.toThrow(/remove: 李 明/);
     await expect(submitSigning(s.links[0].token!, sessionA, { ...base, values: { [mine.id]: "Acme Ltd" } }, meta)).resolves.toBeTruthy();
     expect((await admin.field.findUniqueOrThrow({ where: { id: mine.id } })).value).toBe("Acme Ltd");
   });
