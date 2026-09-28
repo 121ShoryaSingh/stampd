@@ -9,3 +9,7 @@ process.env.S3_BUCKET = "stampd-test";
 process.env.S3_ACCESS_KEY = "test";
 process.env.S3_SECRET_KEY = "test-secret-123";
 process.env.S3_PREFIX = "stampd-test/";
+process.env.SMTP_HOST = inject("smtpHost");
+process.env.SMTP_PORT = String(inject("smtpPort"));
+process.env.EMAIL_FROM_NAME = "Stampd Test";
+process.env.EMAIL_FROM_ADDRESS = "no-reply@stampd.test";

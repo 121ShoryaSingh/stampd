@@ -7,14 +7,19 @@ import pg from "pg";
 
 let db: StartedPostgreSqlContainer | undefined;
 let s3c: StartedTestContainer | undefined;
+let mail: StartedTestContainer | undefined;
 
 export default async function setup(project: TestProject) {
-  [db, s3c] = await Promise.all([
+  [db, s3c, mail] = await Promise.all([
     new PostgreSqlContainer("postgres:16-alpine").start(),
     new GenericContainer("rustfs/rustfs:latest")
       .withEnvironment({ RUSTFS_ACCESS_KEY: "test", RUSTFS_SECRET_KEY: "test-secret-123" })
       .withExposedPorts(9000)
       .withWaitStrategy(Wait.forHttp("/health", 9000))
+      .start(),
+    new GenericContainer("axllent/mailpit:latest")
+      .withExposedPorts(1025, 8025)
+      .withWaitStrategy(Wait.forHttp("/readyz", 8025))
       .start(),
   ]);
 
@@ -37,9 +42,12 @@ export default async function setup(project: TestProject) {
   project.provide("appDbUrl", `postgres://stampd_app:app@${base}`);
   project.provide("migratorDbUrl", migratorUrl);
   project.provide("s3Url", s3Url);
+  project.provide("smtpHost", mail.getHost());
+  project.provide("smtpPort", mail.getMappedPort(1025));
+  project.provide("mailpitUrl", `http://${mail.getHost()}:${mail.getMappedPort(8025)}`);
 
   return async () => {
-    await Promise.all([db?.stop(), s3c?.stop()]);
+    await Promise.all([db?.stop(), s3c?.stop(), mail?.stop()]);
   };
 }
 
@@ -48,5 +56,8 @@ declare module "vitest" {
     appDbUrl: string;
     migratorDbUrl: string;
     s3Url: string;
+    smtpHost: string;
+    smtpPort: number;
+    mailpitUrl: string;
   }
 }
