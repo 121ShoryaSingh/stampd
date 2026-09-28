@@ -7,7 +7,7 @@ import { deleteObject, getObjectBytes, objectSize, presignUpload, putObject } fr
 import { InvalidStateError, NotFoundError, ValidationError } from "@/server/errors";
 import { inspectPdf } from "./pdf";
 import { documentKeyFor, isUploadKeyFor, uploadKeyFor } from "./keys";
-import { senderOf } from "./links";
+import { issueLink, senderOf } from "./links";
 import { enqueueEmail } from "@/server/email/outbox";
 
 export { uploadKeyFor } from "./keys";
@@ -185,5 +185,18 @@ export async function voidEnvelope(i: { tenantId: string; userId: string; envelo
         data: { title: voided.title, senderName: sender.name, reason },
       });
     }
+  });
+}
+
+// Emails a signer a fresh link (their earlier link stops working).
+export async function resendInvite(i: { tenantId: string; userId: string; envelopeId: string; recipientId: string }) {
+  await withTenant(i.tenantId, async (tx) => {
+    const env = await lockEnvelope(tx, i.envelopeId);
+    if (env.status !== "sent" || !env.expiresAt || env.expiresAt <= new Date()) throw new InvalidStateError("Only open envelopes can be resent");
+    const rec = await tx.recipient.findFirst({ where: { id: i.recipientId, envelopeId: i.envelopeId } });
+    if (!rec) throw new NotFoundError("Recipient not found");
+    if (rec.role !== "signer" || (rec.status !== "sent" && rec.status !== "viewed")) throw new InvalidStateError("This signer is not waiting to sign");
+    await issueLink(tx, env, rec, "invite");
+    await appendAudit(tx, { tenantId: i.tenantId, envelopeId: i.envelopeId, actorType: "user", actorId: i.userId, event: "link_reissued", data: { to: rec.email } });
   });
 }

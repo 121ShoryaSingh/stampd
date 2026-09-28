@@ -39,8 +39,7 @@ type Claimed = { id: string; tenantId: string; envelopeId: string; kind: string;
 
 // Links and codes are only needed until the email is out.
 function scrub(data: unknown): Prisma.InputJsonValue {
-  const { url: _url, code: _code, ...rest } = (data ?? {}) as Record<string, unknown>;
-  return rest as Prisma.InputJsonValue;
+  return Object.fromEntries(Object.entries((data ?? {}) as Record<string, unknown>).filter(([k]) => k !== "url" && k !== "code")) as Prisma.InputJsonValue;
 }
 
 // Takes a 2-minute lease on a due job; only one worker wins it.

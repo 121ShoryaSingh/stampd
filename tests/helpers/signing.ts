@@ -10,7 +10,7 @@ import { tokenFor } from "./mail";
 
 // A sent envelope with N signers (s1@x.dev...), each with a signature and a date field.
 // links[i].token is null until that signer's step starts; then use tokenFor().
-export async function sentEnvelope(admin: AdminDb, opts: { signers?: number; sameStep?: boolean; withText?: boolean } = {}) {
+export async function sentEnvelope(admin: AdminDb, opts: { signers?: number; sameStep?: boolean; withText?: boolean; reminderEveryDays?: number } = {}) {
   const n = opts.signers ?? 1;
   const userId = (await insertUser(admin)).id;
   const { id: tenantId } = await createTenant({ userId, name: "Signing Co" });
@@ -39,7 +39,7 @@ export async function sentEnvelope(admin: AdminDb, opts: { signers?: number; sam
       ...(opts.withText ? [{ recipientId: r.id, type: "text" as const, page: 1, x: 0.1, y: 0.18 + i * 0.2, w: 0.3, h: 0.03 }] : []),
     ]),
   });
-  await sendEnvelope({ tenantId, userId, envelopeId, expiresInDays: 30, reminderEveryDays: null });
+  await sendEnvelope({ tenantId, userId, envelopeId, expiresInDays: 30, reminderEveryDays: opts.reminderEveryDays ?? null });
   const links = [];
   for (const r of recs) links.push({ email: r.email, recipientId: r.id, token: await tokenFor(admin, r.id) });
   return { tenantId, envelopeId, userId, links };
