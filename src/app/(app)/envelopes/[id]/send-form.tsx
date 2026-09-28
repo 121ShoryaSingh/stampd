@@ -39,12 +39,12 @@ export function SendForm({ envelopeId }: { envelopeId: string }) {
     <form action={action} className="space-y-4">
       <input type="hidden" name="envelopeId" value={envelopeId} />
       <div className="grid grid-cols-2 gap-4">
-        <Input label="Expires in (days)" name="expiresInDays" type="number" min={1} max={365} defaultValue={30} required />
-        <Input label="Remind every (days, 0 = off)" name="reminderEveryDays" type="number" min={0} max={30} defaultValue={3} required />
+        <Input label="Expires in (days)" name="expiresInDays" type="number" min={1} max={365} defaultValue={30} placeholder="Enter days" required />
+        <Input label="Remind every (days, 0 = off)" name="reminderEveryDays" type="number" min={0} max={30} defaultValue={3} placeholder="Enter days" required />
       </div>
       <label className="block">
         <span className="mb-1 block font-mono text-xs font-bold uppercase">Message to signers (optional)</span>
-        <textarea name="message" maxLength={2000} rows={3} className="border-brutal w-full bg-paper p-3 outline-none focus:bg-yellow" />
+        <textarea name="message" maxLength={2000} rows={3} placeholder="Enter message to signers" className="border-brutal w-full bg-paper p-3 outline-none focus:bg-yellow" />
       </label>
       {state.error && <p role="alert" className="border-brutal bg-red p-3 font-bold text-white">{state.error}</p>}
       <Button variant="primary" disabled={pending}>

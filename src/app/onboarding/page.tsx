@@ -15,7 +15,7 @@ export default function OnboardingPage() {
         <h1 className="mt-2 font-display text-4xl">Name your workspace.</h1>
         <p className="mt-2">Usually your company or team name. You can invite teammates next.</p>
         <form action={action} className="mt-6 space-y-4">
-          <Input label="Workspace name" name="name" required minLength={2} maxLength={60} placeholder="Acme Inc" />
+          <Input label="Workspace name" name="name" required minLength={2} maxLength={60} />
           {state.error && <p role="alert" className="border-brutal bg-red p-3 font-bold text-white">{state.error}</p>}
           <Button variant="primary" disabled={pending} className="w-full justify-center">
             {pending ? "Creating..." : "Create workspace"}

@@ -114,7 +114,7 @@ export default async function EnvelopePage({
         {envelope.status === "sent" && (
           <form action={voidAction} className="flex gap-2">
             <input type="hidden" name="envelopeId" value={id} />
-            <input name="reason" required placeholder="Reason for voiding" aria-label="Reason for voiding" className="border-brutal px-3 py-2" />
+            <input name="reason" required placeholder="Enter reason for voiding" aria-label="Reason for voiding" className="border-brutal px-3 py-2" />
             <Button>Void envelope</Button>
           </form>
         )}

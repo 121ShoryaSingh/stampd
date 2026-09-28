@@ -27,10 +27,10 @@ export function RecipientsForm({ envelopeId, initial }: { envelopeId: string; in
     <div className="space-y-3">
       {rows.map((r, i) => (
         <div key={i} className="grid grid-cols-[1fr_1.4fr_7rem_5rem_auto] items-end gap-2">
-          <input aria-label={`Recipient ${i + 1} name`} placeholder="Name" value={r.name} onChange={(e) => update(i, { name: e.target.value })} className="border-brutal px-2 py-2" />
+          <input aria-label={`Recipient ${i + 1} name`} placeholder="Enter name" value={r.name} onChange={(e) => update(i, { name: e.target.value })} className="border-brutal px-2 py-2" />
           <input
             aria-label={`Recipient ${i + 1} email`}
-            placeholder="email@company.com"
+            placeholder="Enter email"
             type="email"
             value={r.email}
             onChange={(e) => update(i, { email: e.target.value })}
