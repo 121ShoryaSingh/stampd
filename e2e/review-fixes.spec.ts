@@ -1,11 +1,10 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { createAndSend, newUser, signUpWithWorkspace } from "./helpers";
+import { createAndSend, enterCode, newUser, signUpWithWorkspace } from "./helpers";
+import { signingCode } from "./mail";
 
-async function toSignStep(page: Page) {
-  await page.getByRole("button", { name: "Send me a code" }).click();
-  await page.getByLabel("Code").fill(await page.getByTestId("dev-code").innerText());
-  await page.getByRole("button", { name: "Verify" }).click();
+async function toSignStep(page: Page, email: string) {
+  await enterCode(page, email);
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "I agree" }).click();
 }
@@ -21,7 +20,7 @@ test("decline dialog traps focus and closes on Escape", async ({ page, browser }
   const [link] = await createAndSend(page, "Escape Deal", [{ name: "Eli Esc", email: "eli@e2e.dev" }]);
   const signer = await (await browser.newContext()).newPage();
   await signer.goto(link);
-  await toSignStep(signer);
+  await toSignStep(signer, "eli@e2e.dev");
   await signer.getByRole("button", { name: "Decline" }).click();
   const dialog = signer.getByRole("dialog", { name: "Decline to sign" });
   await expect(dialog).toBeVisible();
@@ -49,7 +48,7 @@ test("the signature pad is usable on a short landscape phone", async ({ page, br
   const [link] = await createAndSend(page, "Short Deal", [{ name: "Sho Rt", email: "sho@e2e.dev" }]);
   const signer = await (await browser.newContext({ viewport: { width: 667, height: 375 } })).newPage();
   await signer.goto(link);
-  await toSignStep(signer);
+  await toSignStep(signer, "sho@e2e.dev");
   await signer.getByRole("button", { name: "signature field" }).click();
   const dialog = signer.getByRole("dialog", { name: "Adopt your signature" });
   await dialog.getByRole("button", { name: "type" }).click();
@@ -94,9 +93,10 @@ test("signing works with the keyboard and the sign step passes axe", async ({ pa
   const [link] = await createAndSend(page, "Keyboard Sign", [{ name: "Kay Board", email: "kay@e2e.dev" }]);
   const signer = await (await browser.newContext()).newPage();
   await signer.goto(link);
+  const since = new Date();
   await signer.getByRole("button", { name: "Send me a code" }).focus();
   await signer.keyboard.press("Enter");
-  await signer.getByLabel("Code").fill(await signer.getByTestId("dev-code").innerText());
+  await signer.getByLabel("Code").fill(await signingCode("kay@e2e.dev", since));
   await signer.keyboard.press("Enter");
   await signer.getByRole("checkbox").focus();
   await signer.keyboard.press("Space");

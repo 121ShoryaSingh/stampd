@@ -7,6 +7,7 @@ import { withTenant } from "@/server/db/context";
 import { listAudit } from "@/server/audit/service";
 import { presignGet } from "@/server/storage/storage";
 import { NotFoundError } from "@/server/errors";
+import { deliveries, type Delivery } from "@/server/email/outbox";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,11 +15,20 @@ import { PageHeader } from "@/components/ui/layout";
 import { StatusPill } from "@/components/app/status-pill";
 import { UploadForm } from "./upload-form";
 import { SendForm } from "./send-form";
-import { Thumbnail, VoidButton } from "./parts";
+import { ResendButton, Thumbnail, VoidButton } from "./parts";
 import { deleteDraftAction } from "./actions";
 import { describeEvent, relativeTime } from "./activity";
 
 const time = (d: Date | null) => (d ? d.toISOString().replace("T", " ").slice(0, 16) + " UTC" : null);
+
+function DeliveryLine({ d }: { d: Delivery | undefined }) {
+  if (!d) return null;
+  const what = d.kind === "reminder" ? "Reminder" : "Invite";
+  if (d.status === "failed") {
+    return <p className="mt-1 border-2 border-ink bg-red px-2 py-1 font-mono text-[10px] font-bold text-ink">{what} email failed: {d.lastError ?? "unknown error"}</p>;
+  }
+  return <p className="mt-1 font-mono text-[10px]">{d.status === "sent" ? `${what} emailed ${time(d.at)}` : `${what} email queued`}</p>;
+}
 
 export default async function EnvelopePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string }> }) {
   const { tenant } = await requireTenant();
@@ -29,7 +39,8 @@ export default async function EnvelopePage({ params, searchParams }: { params: P
     throw e;
   });
   const { envelope, document, recipients, fields } = data;
-  const events = await withTenant(tenant.tenantId, (tx) => listAudit(tx, id));
+  const [events, mail] = await Promise.all([withTenant(tenant.tenantId, (tx) => listAudit(tx, id)), deliveries(tenant.tenantId, id)]);
+  const canResend = envelope.status === "sent" && !!envelope.expiresAt && envelope.expiresAt > new Date();
   const thumbUrl = document ? await presignGet(document.s3Key, 600) : null;
   const isDraft = envelope.status === "draft";
   const names = new Map(recipients.map((r) => [r.id, r.name]));
@@ -121,8 +132,14 @@ export default async function EnvelopePage({ params, searchParams }: { params: P
                               <StatusPill status={s.status} />
                             </div>
                             <p className="mt-2 font-mono text-[10px]">
-                              {s.signedAt ? `Signed ${time(s.signedAt)}` : s.viewedAt ? `Opened ${time(s.viewedAt)}` : s.declineReason ? `Declined: ${s.declineReason}` : "Not opened yet"}
+                              {s.signedAt ? `Signed ${time(s.signedAt)}` : s.viewedAt ? `Opened ${time(s.viewedAt)}` : s.declineReason ? `Declined: ${s.declineReason}` : s.status === "pending" && !isDraft ? "Waiting for earlier steps" : "Not opened yet"}
                             </p>
+                            {!s.signedAt && !s.declinedAt && <DeliveryLine d={mail[s.id]} />}
+                            {canResend && (s.status === "sent" || s.status === "viewed") && (
+                              <div className="mt-2">
+                                <ResendButton envelopeId={id} recipientId={s.id} email={s.email} />
+                              </div>
+                            )}
                           </li>
                         ))}
                     </ul>

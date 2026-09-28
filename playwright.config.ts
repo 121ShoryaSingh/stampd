@@ -10,6 +10,12 @@ const testEnv = {
   S3_PREFIX: "e2e/",
   S3_ACCESS_KEY: "stampd",
   S3_SECRET_KEY: "stampd-s3-secret",
+  // Mailpit from compose.dev.yml; tests read links and codes from its API.
+  SMTP_HOST: "localhost",
+  SMTP_PORT: "1025",
+  SMTP_USER: "",
+  SMTP_PASS: "",
+  EMAIL_FROM_ADDRESS: "no-reply@stampd.test",
 };
 
 export default defineConfig({
@@ -20,13 +26,23 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   globalSetup: "./e2e/global-setup.ts",
   use: { baseURL: `http://localhost:${PORT}`, trace: "retain-on-failure" },
-  webServer: {
-    command: `npx next dev -p ${PORT}`,
-    url: `http://localhost:${PORT}`,
-    reuseExistingServer: false,
-    timeout: 120_000,
-    env: testEnv,
-  },
+  webServer: [
+    {
+      command: `npx next dev -p ${PORT}`,
+      url: `http://localhost:${PORT}`,
+      reuseExistingServer: false,
+      timeout: 120_000,
+      env: testEnv,
+    },
+    // Sends the emails the tests wait for. Stop any dev worker first: it would send e2e mail with dev links.
+    {
+      command: "npm run worker",
+      wait: { stdout: /worker started/ },
+      reuseExistingServer: false,
+      timeout: 60_000,
+      env: testEnv,
+    },
+  ],
 });
 
 export { testEnv };

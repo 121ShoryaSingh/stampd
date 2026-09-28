@@ -1,5 +1,6 @@
 import { test, expect, type Browser, type Page } from "@playwright/test";
-import { createAndSend, newUser, signUpWithWorkspace } from "./helpers";
+import { createAndSend, enterCode, newUser, signUpWithWorkspace } from "./helpers";
+import { signingLink } from "./mail";
 
 async function signerPage(browser: Browser, path: string) {
   const page = await (await browser.newContext()).newPage();
@@ -8,12 +9,9 @@ async function signerPage(browser: Browser, path: string) {
 }
 
 // Code check, consent, draw a signature, finish.
-async function signAs(page: Page) {
+async function signAs(page: Page, email: string) {
   await expect(page.getByRole("heading", { name: "Enter your code" })).toBeVisible();
-  await page.getByRole("button", { name: "Send me a code" }).click();
-  const code = await page.getByTestId("dev-code").innerText();
-  await page.getByLabel("Code").fill(code);
-  await page.getByRole("button", { name: "Verify" }).click();
+  await enterCode(page, email);
 
   await expect(page.getByRole("heading", { name: "Before you sign" })).toBeVisible();
   await page.getByRole("checkbox").check();
@@ -36,22 +34,22 @@ async function signAs(page: Page) {
 
 test("two signers sign in order and the envelope completes", async ({ page, browser }) => {
   await signUpWithWorkspace(page, newUser("owner"));
-  const [link1, link2] = await createAndSend(page, "Two Step Deal", [
+  const [link1] = await createAndSend(page, "Two Step Deal", [
     { name: "Ada First", email: "ada@e2e.dev" },
     { name: "Bo Second", email: "bo@e2e.dev" },
   ]);
   const envelopeUrl = page.url();
-
-  const second = await signerPage(browser, link2);
-  await expect(second.getByRole("heading", { name: "Waiting for others" })).toBeVisible();
-  // Signing tokens live in the URL, so the page must never send it as a Referer.
-  await expect(second.locator('meta[name="referrer"]')).toHaveAttribute("content", "no-referrer");
+  // Step 2 has no link yet.
+  await expect(page.getByText("Waiting for earlier steps")).toBeVisible();
 
   const first = await signerPage(browser, link1);
-  await signAs(first);
+  // Signing tokens live in the URL, so the page must never send it as a Referer.
+  await expect(first.locator('meta[name="referrer"]')).toHaveAttribute("content", "no-referrer");
+  const since = new Date();
+  await signAs(first, "ada@e2e.dev");
 
-  await second.reload();
-  await signAs(second);
+  const second = await signerPage(browser, await signingLink("bo@e2e.dev", "Two Step Deal", since));
+  await signAs(second, "bo@e2e.dev");
 
   await page.goto(envelopeUrl);
   await expect(page.getByText("completed", { exact: true }).first()).toBeVisible();
@@ -63,9 +61,7 @@ test("a signer declines and the envelope closes for everyone", async ({ page, br
   const envelopeUrl = page.url();
 
   const signer = await signerPage(browser, link);
-  await signer.getByRole("button", { name: "Send me a code" }).click();
-  await signer.getByLabel("Code").fill(await signer.getByTestId("dev-code").innerText());
-  await signer.getByRole("button", { name: "Verify" }).click();
+  await enterCode(signer, "cy@e2e.dev");
   await signer.getByRole("checkbox").check();
   await signer.getByRole("button", { name: "I agree" }).click();
   await signer.getByRole("button", { name: "Decline" }).click();

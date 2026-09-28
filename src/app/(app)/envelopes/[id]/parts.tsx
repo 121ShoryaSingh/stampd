@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
-import { Ban } from "lucide-react";
+import { Ban, Send } from "lucide-react";
 import { PdfCanvas } from "@/components/pdf/pdf-canvas";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Textarea } from "@/components/ui/fields";
-import { voidAction } from "./actions";
+import { useToast } from "@/components/ui/toast";
+import { resendAction, voidAction } from "./actions";
 
 export function Thumbnail({ url, width = 150 }: { url: string; width?: number }) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
@@ -51,5 +52,26 @@ export function VoidButton({ envelopeId }: { envelopeId: string }) {
         </form>
       </Modal>
     </>
+  );
+}
+
+export function ResendButton({ envelopeId, recipientId, email }: { envelopeId: string; recipientId: string; email: string }) {
+  const [pending, start] = useTransition();
+  const { show } = useToast();
+  return (
+    <Button
+      size="sm"
+      loading={pending}
+      icon={<Send aria-hidden className="h-3 w-3" />}
+      aria-label={`Resend email to ${email}`}
+      onClick={() =>
+        start(async () => {
+          const res = await resendAction(envelopeId, recipientId);
+          show(res.error ?? `New link emailed to ${email}`, res.error ? "red" : "green");
+        })
+      }
+    >
+      Resend
+    </Button>
   );
 }

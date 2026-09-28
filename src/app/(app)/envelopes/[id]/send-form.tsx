@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useState } from "react";
 import { sendAction } from "./actions";
 import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
@@ -10,13 +10,14 @@ import { DatePicker, daysUntil } from "@/components/ui/date-picker";
 const DAY = 86_400_000;
 
 export function SendForm({ envelopeId }: { envelopeId: string }) {
-  const [state, action, pending] = useActionState(sendAction, {});
-  const [days, setDays] = useState(30);
   const { show } = useToast();
-  // The page re-renders as "sent"; the toast outlives this form.
-  useEffect(() => {
-    if (state.invited) show("Sent. Signing emails are on their way.");
-  }, [state, show]);
+  // The page re-renders as "sent" and unmounts this form, so toast as soon as the action returns.
+  const [state, action, pending] = useActionState(async (prev: Awaited<ReturnType<typeof sendAction>>, form: FormData) => {
+    const res = await sendAction(prev, form);
+    if (res.invited) show("Sent. Signing emails are on their way.");
+    return res;
+  }, {});
+  const [days, setDays] = useState(30);
   return (
     <form action={action} className="space-y-4">
       <input type="hidden" name="envelopeId" value={envelopeId} />

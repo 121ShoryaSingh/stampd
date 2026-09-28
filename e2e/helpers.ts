@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test";
+import { signingCode, signingLink } from "./mail";
 
 export type TestUser = { name: string; email: string; password: string };
 
@@ -25,7 +26,8 @@ export async function signUpWithWorkspace(page: Page, u: TestUser) {
 
 export type Signer = { name: string; email: string };
 
-// Sender flow: new envelope, 1-page PDF, signers in order, one signature field each, send. Returns signing links.
+// Sender flow: new envelope, 1-page PDF, signers in order, one signature field each, send.
+// Returns the first signer's link (from the invite email); later signers are invited when their step starts.
 export async function createAndSend(page: Page, title: string, signers: Signer[]) {
   const { PDFDocument } = await import("pdf-lib");
   await page.getByRole("link", { name: "New envelope" }).click();
@@ -56,10 +58,17 @@ export async function createAndSend(page: Page, title: string, signers: Signer[]
   await expect(page.getByRole("status").filter({ hasText: `Saved ${signers.length} fields` })).toBeVisible();
 
   await page.getByRole("link", { name: "Back to envelope" }).click();
+  const since = new Date();
   await page.getByRole("button", { name: "Send for signature" }).click();
-  await expect(page.getByText("Sent.")).toBeVisible();
-  const links: string[] = [];
-  for (const s of signers) links.push(await page.getByLabel(`Signing link for ${s.email}`).inputValue());
-  await page.getByRole("button", { name: "Done" }).click();
-  return links.map((l) => new URL(l).pathname);
+  await expect(page.getByText("Sent. Signing emails are on their way.")).toBeVisible();
+  return [await signingLink(signers[0].email, title, since)];
+}
+
+// Signer: request a code, read it from the email, verify.
+export async function enterCode(page: Page, email: string) {
+  const since = new Date();
+  await page.getByRole("button", { name: "Send me a code" }).click();
+  await expect(page.getByText(`We emailed a 6-digit code to ${email}`)).toBeVisible();
+  await page.getByLabel("Code").fill(await signingCode(email, since));
+  await page.getByRole("button", { name: "Verify" }).click();
 }

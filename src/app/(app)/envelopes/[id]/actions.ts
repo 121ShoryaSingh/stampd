@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireTenant } from "@/server/tenants/current";
-import { deleteDraft, finalizeUpload, voidEnvelope } from "@/server/envelopes/service";
+import { deleteDraft, finalizeUpload, resendInvite, voidEnvelope } from "@/server/envelopes/service";
 import { sendEnvelope } from "@/server/envelopes/send";
 import { DomainError } from "@/server/errors";
 
@@ -64,6 +64,14 @@ export async function voidAction(form: FormData) {
   );
   if (res.error) redirect(`/envelopes/${envelopeId}?error=${encodeURIComponent(res.error)}`);
   revalidatePath(`/envelopes/${envelopeId}`);
+}
+
+export async function resendAction(envelopeId: string, recipientId: string) {
+  const { session, tenant } = await requireTenant();
+  const p = z.object({ envelopeId: z.string().uuid(), recipientId: z.string().uuid() }).parse({ envelopeId, recipientId });
+  const res = await guard(() => resendInvite({ tenantId: tenant.tenantId, userId: session.user.id, ...p }));
+  revalidatePath(`/envelopes/${p.envelopeId}`);
+  return { error: res.error };
 }
 
 export async function deleteDraftAction(form: FormData) {
