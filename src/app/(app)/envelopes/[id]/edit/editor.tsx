@@ -7,11 +7,13 @@ import { saveFieldsAction } from "./actions";
 import { Button } from "@/components/ui/button";
 import { clampBox, DEFAULT_FIELD_SIZE, type Box, type FieldKind } from "@/lib/fields/geometry";
 import { pruneOrphanFields } from "@/lib/fields/prune";
+import { alignToOthers, moveBox, resizeBox, GRID_MAJOR_EVERY, GRID_STEP, type Guides, type Handle } from "@/lib/fields/snap";
 
 type Recipient = { id: string; name: string; email: string; role: "signer" | "cc" };
-type EditorField = Box & { key: string; recipientId: string; type: FieldKind; page: number };
+type EditorField = Box & { key: string; recipientId: string; type: FieldKind; page: number; required?: boolean };
 type PageSize = { w: number; h: number };
-type Drag = { key: string; mode: "move" | "resize"; startX: number; startY: number; orig: Box; pageW: number; pageH: number };
+type FieldDrag = { kind: "field"; key: string; handle: Handle | "move"; startX: number; startY: number; orig: Box; pageW: number; pageH: number };
+type PaletteDrag = { kind: "palette"; type: FieldKind; startX: number; startY: number; x: number; y: number; moved: boolean };
 
 const KINDS: { type: FieldKind; label: string }[] = [
   { type: "signature", label: "Signature" },
@@ -20,8 +22,20 @@ const KINDS: { type: FieldKind; label: string }[] = [
   { type: "text", label: "Text" },
   { type: "checkbox", label: "Checkbox" },
 ];
+const HANDLES: { h: Handle; cls: string }[] = [
+  { h: "nw", cls: "-left-1.5 -top-1.5 cursor-nwse-resize" },
+  { h: "n", cls: "left-1/2 -top-1.5 -translate-x-1/2 cursor-ns-resize" },
+  { h: "ne", cls: "-right-1.5 -top-1.5 cursor-nesw-resize" },
+  { h: "e", cls: "-right-1.5 top-1/2 -translate-y-1/2 cursor-ew-resize" },
+  { h: "se", cls: "-bottom-1.5 -right-1.5 cursor-nwse-resize" },
+  { h: "s", cls: "-bottom-1.5 left-1/2 -translate-x-1/2 cursor-ns-resize" },
+  { h: "sw", cls: "-bottom-1.5 -left-1.5 cursor-nesw-resize" },
+  { h: "w", cls: "-left-1.5 top-1/2 -translate-y-1/2 cursor-ew-resize" },
+];
 const COLORS = ["#FFE600", "#FF8AD8", "#00D26A", "#7FA8FF", "#FF9A6B"];
 const PAGE_W = 760;
+const ALIGN_PX = 5;
+const NO_GUIDES: Guides = { v: [], h: [] };
 
 export function FieldEditor(props: { envelopeId: string; pdfUrl: string; pageSizes: PageSize[]; recipients: Recipient[]; initial: EditorField[] }) {
   const signers = props.recipients.filter((r) => r.role === "signer");
@@ -33,9 +47,15 @@ export function FieldEditor(props: { envelopeId: string; pdfUrl: string; pageSiz
   // Signers can change after load (recipients saved above), so fall back to the first one.
   const assignee = signers.some((s) => s.id === picked) ? picked : (signers[0]?.id ?? "");
   const [selected, setSelected] = useState<string | null>(null);
+  const [showGrid, setShowGrid] = useState(true);
+  const [snap, setSnap] = useState(true);
+  const [guides, setGuides] = useState<{ page: number; g: Guides }>({ page: 0, g: NO_GUIDES });
+  const [ghost, setGhost] = useState<PaletteDrag | null>(null);
   const [msg, setMsg] = useState<{ ok?: string; error?: string }>({});
-  const drag = useRef<Drag | null>(null);
+  const drag = useRef<FieldDrag | PaletteDrag | null>(null);
   const color = (rid: string) => COLORS[Math.max(0, signers.findIndex((s) => s.id === rid)) % COLORS.length];
+  const sel = fields.find((f) => f.key === selected) ?? null;
+  const update = (key: string, patch: Partial<EditorField>) => setFields((fs) => fs.map((f) => (f.key === key ? { ...f, ...patch } : f)));
 
   useEffect(() => {
     let alive = true;
@@ -50,44 +70,104 @@ export function FieldEditor(props: { envelopeId: string; pdfUrl: string; pageSiz
     };
   }, [props.pdfUrl]);
 
+  // Keyboard: nudge, duplicate, delete, deselect.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement;
-      if ((e.key === "Delete" || e.key === "Backspace") && selected && !typing) {
-        setFields((fs) => fs.filter((f) => f.key !== selected));
-        setSelected(null);
+      const t = e.target as HTMLElement;
+      if (t instanceof HTMLInputElement || t instanceof HTMLSelectElement || t instanceof HTMLTextAreaElement) return;
+      if (e.key === "Escape") return setSelected(null), setTool(null);
+      if (!sel) return;
+      if (e.key === "Delete" || e.key === "Backspace") {
+        e.preventDefault();
+        setFields((fs) => fs.filter((f) => f.key !== sel.key));
+        return setSelected(null);
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d") {
+        e.preventDefault();
+        const copy = { ...sel, ...moveBox(sel, GRID_STEP, GRID_STEP), key: crypto.randomUUID() };
+        setFields((fs) => [...fs, copy]);
+        return setSelected(copy.key);
+      }
+      const step = e.altKey ? 0.001 : e.shiftKey ? GRID_STEP * 4 : GRID_STEP;
+      const d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
+      if (d) {
+        e.preventDefault();
+        update(sel.key, moveBox(sel, d[0], d[1]));
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selected]);
+  }, [sel]);
 
-  function place(e: React.MouseEvent<HTMLDivElement>, page: number) {
-    if (!tool || !assignee || e.target !== e.currentTarget.firstChild) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const size = DEFAULT_FIELD_SIZE[tool];
-    const box = clampBox({ x: (e.clientX - rect.left) / rect.width - size.w / 2, y: (e.clientY - rect.top) / rect.height - size.h / 2, ...size });
-    const f = { ...box, key: crypto.randomUUID(), recipientId: assignee, type: tool, page };
+  function addField(type: FieldKind, page: number, cx: number, cy: number) {
+    if (!assignee) return;
+    const size = DEFAULT_FIELD_SIZE[type];
+    let box = clampBox({ x: cx - size.w / 2, y: cy - size.h / 2, ...size });
+    if (snap) box = moveBox(box, 0, 0, { grid: GRID_STEP });
+    const f = { ...box, key: crypto.randomUUID(), recipientId: assignee, type, page };
     setFields((fs) => [...fs, f]);
     setSelected(f.key);
   }
 
-  function startDrag(e: React.PointerEvent, f: EditorField, mode: Drag["mode"]) {
+  function place(e: React.MouseEvent<HTMLDivElement>, page: number) {
+    if (e.target !== e.currentTarget.querySelector("canvas")) return;
+    if (!tool) return setSelected(null);
+    const r = e.currentTarget.getBoundingClientRect();
+    addField(tool, page, (e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
+  }
+
+  function startFieldDrag(e: React.PointerEvent, f: EditorField, handle: Handle | "move") {
     e.stopPropagation();
     const pageEl = (e.currentTarget as HTMLElement).closest("[data-page]") as HTMLElement;
     const r = pageEl.getBoundingClientRect();
-    drag.current = { key: f.key, mode, startX: e.clientX, startY: e.clientY, orig: { x: f.x, y: f.y, w: f.w, h: f.h }, pageW: r.width, pageH: r.height };
+    drag.current = { kind: "field", key: f.key, handle, startX: e.clientX, startY: e.clientY, orig: { x: f.x, y: f.y, w: f.w, h: f.h }, pageW: r.width, pageH: r.height };
     setSelected(f.key);
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function startPaletteDrag(e: React.PointerEvent, type: FieldKind) {
+    const d: PaletteDrag = { kind: "palette", type, startX: e.clientX, startY: e.clientY, x: e.clientX, y: e.clientY, moved: false };
+    drag.current = d;
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
   }
 
   function onMove(e: React.PointerEvent) {
     const d = drag.current;
     if (!d) return;
+    if (d.kind === "palette") {
+      const moved = d.moved || Math.hypot(e.clientX - d.startX, e.clientY - d.startY) > 4;
+      drag.current = { ...d, x: e.clientX, y: e.clientY, moved };
+      if (moved) setGhost(drag.current as PaletteDrag);
+      return;
+    }
+    const f = fields.find((x) => x.key === d.key);
+    if (!f) return;
     const dx = (e.clientX - d.startX) / d.pageW;
     const dy = (e.clientY - d.startY) / d.pageH;
-    const next = d.mode === "move" ? { ...d.orig, x: d.orig.x + dx, y: d.orig.y + dy } : { ...d.orig, w: d.orig.w + dx, h: d.orig.h + dy };
-    setFields((fs) => fs.map((f) => (f.key === d.key ? { ...f, ...clampBox(next) } : f)));
+    const grid = snap && !e.altKey ? GRID_STEP : undefined;
+    let box = d.handle === "move" ? moveBox(d.orig, dx, dy, { grid }) : resizeBox(d.orig, d.handle, dx, dy, { grid });
+    let g = NO_GUIDES;
+    if (d.handle === "move" && !e.altKey) {
+      const others = fields.filter((x) => x.page === f.page && x.key !== f.key);
+      const a = alignToOthers(box, others, ALIGN_PX / d.pageW);
+      box = moveBox(a.box, 0, 0);
+      g = a.guides;
+    }
+    setGuides({ page: f.page, g });
+    update(d.key, box);
+  }
+
+  function onUp(e: React.PointerEvent) {
+    const d = drag.current;
+    drag.current = null;
+    setGuides({ page: 0, g: NO_GUIDES });
+    if (!d || d.kind !== "palette") return;
+    setGhost(null);
+    if (!d.moved) return setTool(tool === d.type ? null : d.type); // a click picks the tool
+    const pageEl = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-page]") as HTMLElement | null;
+    if (!pageEl) return;
+    const r = pageEl.getBoundingClientRect();
+    addField(d.type, Number(pageEl.dataset.page), (e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
   }
 
   async function save() {
@@ -103,8 +183,9 @@ export function FieldEditor(props: { envelopeId: string; pdfUrl: string; pageSiz
     return <p className="border-brutal bg-yellow p-4 font-bold">Add at least one signer above, then place their fields.</p>;
   }
 
+  const minorPx = PAGE_W * GRID_STEP;
   return (
-    <div className="grid grid-cols-[14rem_1fr] gap-6" onPointerMove={onMove} onPointerUp={() => (drag.current = null)}>
+    <div className="grid grid-cols-[15rem_1fr] gap-6" onPointerMove={onMove} onPointerUp={onUp}>
       <aside className="sticky top-4 h-fit space-y-4">
         <label className="block">
           <span className="mb-1 block font-mono text-xs font-bold uppercase">Assign to</span>
@@ -122,26 +203,59 @@ export function FieldEditor(props: { envelopeId: string; pdfUrl: string; pageSiz
               key={k.type}
               type="button"
               aria-pressed={tool === k.type}
-              onClick={() => setTool(tool === k.type ? null : k.type)}
-              className={`border-brutal px-3 py-2 text-left font-bold ${tool === k.type ? "bg-ink text-paper" : "bg-paper hover:bg-yellow"}`}
+              onPointerDown={(e) => startPaletteDrag(e, k.type)}
+              className={`border-brutal flex touch-none select-none items-center justify-between px-3 py-2 text-left font-bold ${tool === k.type ? "bg-ink text-paper" : "bg-paper hover:bg-yellow"}`}
             >
               {k.label}
+              <span aria-hidden className="font-mono text-xs opacity-60">::</span>
             </button>
           ))}
         </div>
-        <p className="font-mono text-xs">Pick a field type, then click on the page. Drag to move, drag the corner to resize, Delete to remove.</p>
+        <p className="font-mono text-xs">Drag a field onto the page, or pick one and click. Arrows nudge, Shift+arrows move 4 cells, Alt for fine moves, Ctrl+D duplicates, Delete removes.</p>
+        <div className="border-brutal space-y-1 p-2 font-mono text-xs font-bold uppercase">
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={showGrid} onChange={(e) => setShowGrid(e.target.checked)} /> Show grid
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} /> Snap to grid
+          </label>
+        </div>
+        {sel && (
+          <div className="border-brutal space-y-2 bg-yellow/40 p-2" aria-label="Selected field">
+            <p className="font-mono text-xs font-bold uppercase">
+              {sel.type} - page {sel.page}
+            </p>
+            <select aria-label="Field signer" value={sel.recipientId} onChange={(e) => update(sel.key, { recipientId: e.target.value })} className="border-brutal w-full px-2 py-1">
+              {signers.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+            {sel.type !== "date" && (
+              <label className="flex items-center gap-2 text-sm font-bold">
+                <input type="checkbox" checked={sel.required ?? sel.type !== "checkbox"} onChange={(e) => update(sel.key, { required: e.target.checked })} /> Required
+              </label>
+            )}
+            <Button type="button" className="w-full justify-center py-1" onClick={() => (setFields((fs) => fs.filter((f) => f.key !== sel.key)), setSelected(null))}>
+              Delete field
+            </Button>
+          </div>
+        )}
         <Button variant="primary" type="button" onClick={save} className="w-full justify-center">
           Save fields
         </Button>
         {msg.error && <p role="alert" className="border-brutal bg-red p-2 text-sm font-bold text-white">{msg.error}</p>}
         {msg.ok && <p role="status" className="border-brutal bg-green p-2 text-sm font-bold">{msg.ok}</p>}
       </aside>
+
       <div className="space-y-6">
         {!doc && <p className="font-mono">Loading PDF...</p>}
         {doc &&
           props.pageSizes.map((ps, i) => {
             const page = i + 1;
             const h = (ps.h / ps.w) * PAGE_W;
+            const g = guides.page === page ? guides.g : NO_GUIDES;
             return (
               <div
                 key={page}
@@ -152,6 +266,31 @@ export function FieldEditor(props: { envelopeId: string; pdfUrl: string; pageSiz
                 style={{ width: PAGE_W, height: h }}
               >
                 <PdfCanvas doc={doc} pageNumber={page} width={PAGE_W} />
+                {showGrid && (
+                  <div
+                    className="pointer-events-none absolute inset-0"
+                    style={{
+                      backgroundImage: [
+                        "linear-gradient(to right, rgba(0,0,0,.22) 1px, transparent 1px)",
+                        "linear-gradient(to bottom, rgba(0,0,0,.22) 1px, transparent 1px)",
+                        "linear-gradient(to right, rgba(0,0,0,.07) 1px, transparent 1px)",
+                        "linear-gradient(to bottom, rgba(0,0,0,.07) 1px, transparent 1px)",
+                      ].join(","),
+                      backgroundSize: [
+                        `${minorPx * GRID_MAJOR_EVERY}px ${h * GRID_STEP * GRID_MAJOR_EVERY}px`,
+                        `${minorPx * GRID_MAJOR_EVERY}px ${h * GRID_STEP * GRID_MAJOR_EVERY}px`,
+                        `${minorPx}px ${h * GRID_STEP}px`,
+                        `${minorPx}px ${h * GRID_STEP}px`,
+                      ].join(","),
+                    }}
+                  />
+                )}
+                {g.v.map((x) => (
+                  <div key={`v${x}`} className="pointer-events-none absolute inset-y-0 border-l-2 border-dashed border-red" style={{ left: x * PAGE_W }} />
+                ))}
+                {g.h.map((y) => (
+                  <div key={`h${y}`} className="pointer-events-none absolute inset-x-0 border-t-2 border-dashed border-red" style={{ top: y * h }} />
+                ))}
                 {fields
                   .filter((f) => f.page === page)
                   .map((f) => (
@@ -160,21 +299,37 @@ export function FieldEditor(props: { envelopeId: string; pdfUrl: string; pageSiz
                       role="button"
                       tabIndex={0}
                       aria-label={`${f.type} field`}
-                      onPointerDown={(e) => startDrag(e, f, "move")}
-                      className={`absolute flex cursor-move select-none items-center border-2 border-ink px-1 font-mono text-[10px] font-bold uppercase ${selected === f.key ? "outline outline-2 outline-offset-2 outline-red" : ""}`}
+                      onPointerDown={(e) => startFieldDrag(e, f, "move")}
+                      onFocus={() => setSelected(f.key)}
+                      className={`absolute flex cursor-move touch-none select-none items-center overflow-hidden border-2 border-ink px-1 font-mono text-[10px] font-bold uppercase ${selected === f.key ? "z-10 outline outline-2 outline-offset-2 outline-red" : ""}`}
                       style={{ left: f.x * PAGE_W, top: f.y * h, width: f.w * PAGE_W, height: f.h * h, background: color(f.recipientId) }}
                     >
                       {f.type}
-                      <span
-                        onPointerDown={(e) => startDrag(e, f, "resize")}
-                        className="absolute -bottom-1.5 -right-1.5 h-3 w-3 cursor-se-resize border-2 border-ink bg-paper"
-                      />
+                      {selected === f.key &&
+                        HANDLES.map(({ h: hd, cls }) => (
+                          <span
+                            key={hd}
+                            aria-hidden
+                            onPointerDown={(e) => startFieldDrag(e, f, hd)}
+                            className={`absolute h-3 w-3 border-2 border-ink bg-paper ${cls}`}
+                          />
+                        ))}
                     </div>
                   ))}
               </div>
             );
           })}
       </div>
+
+      {ghost && (
+        <div
+          aria-hidden
+          className="border-brutal pointer-events-none fixed z-50 bg-yellow px-2 py-1 font-mono text-xs font-bold uppercase shadow-hard-sm"
+          style={{ left: ghost.x + 8, top: ghost.y + 8 }}
+        >
+          {ghost.type}
+        </div>
+      )}
     </div>
   );
 }

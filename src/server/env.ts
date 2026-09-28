@@ -10,6 +10,7 @@ const schema = z.object({
   S3_ENDPOINT: z.string().url().optional(), // RustFS / R2; leave unset for AWS S3
   S3_ACCESS_KEY: z.string().min(1).optional(),
   S3_SECRET_KEY: z.string().min(1).optional(),
+  S3_PREFIX: z.string().regex(/^[a-z0-9-]+\/$/, "S3_PREFIX must look like 'stampd/'").optional(), // folder in a shared bucket
 });
 
 export const env = schema.parse(process.env);

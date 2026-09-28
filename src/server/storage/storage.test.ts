@@ -1,4 +1,5 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, inject } from "vitest";
+import { S3Client, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { randomUUID } from "node:crypto";
 import { presignUpload, presignGet, getObjectBytes, objectExists, objectSize, putObject, deleteObject } from "./storage";
 import { NotFoundError } from "@/server/errors";
@@ -30,6 +31,14 @@ describe("storage", () => {
     await putObject(k, new Uint8Array(1234), "application/pdf");
     expect(await objectSize(k)).toBe(1234);
     expect(await objectSize(key())).toBeNull();
+  });
+
+  it("stores every object under the S3_PREFIX folder", async () => {
+    const k = key();
+    await putObject(k, new Uint8Array([7]), "application/pdf");
+    const raw = new S3Client({ endpoint: inject("s3Url"), region: "us-east-1", forcePathStyle: true, credentials: { accessKeyId: "test", secretAccessKey: "test-secret-123" } });
+    await expect(raw.send(new HeadObjectCommand({ Bucket: "stampd-test", Key: `stampd-test/${k}` }))).resolves.toBeTruthy();
+    await expect(raw.send(new HeadObjectCommand({ Bucket: "stampd-test", Key: k }))).rejects.toThrow();
   });
 
   it("throws NotFoundError for a missing key", async () => {

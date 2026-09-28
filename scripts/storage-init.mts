@@ -1,6 +1,14 @@
-import { S3Client, CreateBucketCommand, HeadBucketCommand, PutBucketCorsCommand } from "@aws-sdk/client-s3";
+import {
+  S3Client,
+  CreateBucketCommand,
+  HeadBucketCommand,
+  GetBucketCorsCommand,
+  PutBucketCorsCommand,
+  type CORSRule,
+} from "@aws-sdk/client-s3";
 
-// Creates the bucket if missing and lets the app origin PUT/GET directly. Works for RustFS and R2.
+// Makes sure the bucket exists and lets the app origin PUT/GET directly.
+// Safe on shared buckets: existing CORS rules are kept, Stampd's rule is only added.
 const need = (k: string) => {
   const v = process.env[k];
   if (!v) throw new Error(`${k} is not set`);
@@ -20,17 +28,27 @@ const s3 = new S3Client({
 try {
   await s3.send(new HeadBucketCommand({ Bucket: bucket }));
   console.log(`bucket ${bucket} exists`);
-} catch {
+} catch (e) {
+  // Only create when the bucket is really missing, never on a permissions error.
+  if ((e as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode !== 404) throw e;
   await s3.send(new CreateBucketCommand({ Bucket: bucket }));
   console.log(`bucket ${bucket} created`);
 }
 
-await s3.send(
-  new PutBucketCorsCommand({
-    Bucket: bucket,
-    CORSConfiguration: {
-      CORSRules: [{ AllowedOrigins: [origin], AllowedMethods: ["PUT", "GET"], AllowedHeaders: ["content-type"], MaxAgeSeconds: 3600 }],
-    },
-  }),
+let rules: CORSRule[] = [];
+try {
+  rules = (await s3.send(new GetBucketCorsCommand({ Bucket: bucket }))).CORSRules ?? [];
+} catch (e) {
+  if ((e as { name?: string }).name !== "NoSuchCORSConfiguration") throw e;
+}
+
+const covered = rules.some(
+  (r) => (r.AllowedOrigins ?? []).some((o) => o === origin || o === "*") && ["PUT", "GET"].every((m) => (r.AllowedMethods ?? []).includes(m)),
 );
-console.log(`CORS allows ${origin}`);
+if (covered) {
+  console.log(`CORS already allows ${origin} (${rules.length} rules kept)`);
+} else {
+  const ours: CORSRule = { AllowedOrigins: [origin], AllowedMethods: ["PUT", "GET"], AllowedHeaders: ["content-type"], MaxAgeSeconds: 3600 };
+  await s3.send(new PutBucketCorsCommand({ Bucket: bucket, CORSConfiguration: { CORSRules: [...rules, ours] } }));
+  console.log(`CORS rule added for ${origin} (${rules.length} existing rules kept)`);
+}

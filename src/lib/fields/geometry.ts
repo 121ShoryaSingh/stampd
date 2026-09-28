@@ -11,11 +11,13 @@ export const DEFAULT_FIELD_SIZE: Record<FieldKind, { w: number; h: number }> = {
 };
 
 const EPS = 1e-9;
+// Matches MIN_SIZE in snap.ts; blocks invisible fields.
+const MIN_FIELD = 0.01 - EPS;
 const round = (n: number) => Math.round(n * 1e6) / 1e6;
 
 export function isValidBox(b: Box): boolean {
   if (![b.x, b.y, b.w, b.h].every(Number.isFinite)) return false;
-  return b.x >= 0 && b.y >= 0 && b.w > 0 && b.h > 0 && b.x + b.w <= 1 + EPS && b.y + b.h <= 1 + EPS;
+  return b.x >= 0 && b.y >= 0 && b.w >= MIN_FIELD && b.h >= MIN_FIELD && b.x + b.w <= 1 + EPS && b.y + b.h <= 1 + EPS;
 }
 
 export function clampBox(b: Box): Box {

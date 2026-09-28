@@ -7,6 +7,7 @@ describe("field geometry", () => {
     expect(isValidBox({ x: 0.9, y: 0.1, w: 0.2, h: 0.05 })).toBe(false);
     expect(isValidBox({ x: -0.01, y: 0.1, w: 0.2, h: 0.05 })).toBe(false);
     expect(isValidBox({ x: 0.1, y: 0.1, w: 0, h: 0.05 })).toBe(false);
+    expect(isValidBox({ x: 0.1, y: 0.1, w: 0.001, h: 0.05 })).toBe(false);
     expect(isValidBox({ x: Number.NaN, y: 0, w: 0.1, h: 0.1 })).toBe(false);
   });
 
