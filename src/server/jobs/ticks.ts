@@ -28,6 +28,8 @@ export async function remindDue(o: TickOptions = {}) {
         envelope: { status: "sent", reminderEveryDays: { not: null }, expiresAt: { gt: now } },
       },
       select: { id: true, tenantId: true, envelopeId: true, invitedAt: true, lastRemindedAt: true, envelope: { select: { reminderEveryDays: true } } },
+      // Longest-waiting first, so the cap never starves a due reminder.
+      orderBy: [{ lastRemindedAt: { sort: "asc", nulls: "first" } }, { invitedAt: "asc" }],
       take: 500,
     }),
   );

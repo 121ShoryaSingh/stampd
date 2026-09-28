@@ -47,8 +47,8 @@ run as two containers:
 | Container | Command | Responsibility |
 |---|---|---|
 | web | `node server.js` | UI, server actions, route handlers, auth, presigned S3 URLs, enqueue jobs |
-| worker | `node dist/worker.js` | pg-boss consumers: email, reminders, expiry, finalize |
-| postgres | postgres:16 | tenant data (RLS), audit log, pg-boss queue |
+| worker | `node dist/worker.js` | email outbox, reminders, expiry, finalize |
+| postgres | postgres:16 | tenant data (RLS), audit log, email outbox |
 | caddy | caddy:2 | TLS, body-size limit (25 MB), rate limits |
 
 External: S3-compatible storage (Hetzner Object Storage or Cloudflare R2),
@@ -56,6 +56,12 @@ an SMTP server for email (nodemailer; same env names as SafetyShield/Horizon), a
 
 Rule: heavy work (PDF stamping/sealing, email sending) never runs in `web`.
 `web` writes rows and enqueues jobs, then returns.
+
+Queue: a transactional outbox (`email_jobs`, written by Prisma in the same
+transaction as the state change) instead of pg-boss, so an email exists
+exactly when its change committed and app code stays Prisma-only. The worker
+finds due work across tenants through read-only `worker_read` RLS policies
+(transaction flag `app.worker`) and writes through `withTenant()`. See Plan 5.
 
 ### Libraries
 
@@ -156,8 +162,10 @@ marked `completed` (pending seal) and `finalize-envelope` is enqueued.
 
 ## 5. Signing flow and security
 
-1. Sending creates a 32-byte random token per recipient; only its SHA-256 is
-   stored. Link: `/sign/<token>`. Valid until envelope expiry or completion.
+1. When a signer's routing step starts, a 32-byte random token is created;
+   only its SHA-256 is stored. Link: `/sign/<token>`. Valid until envelope
+   expiry or completion, or until a reminder or resend issues a newer link
+   (the raw token cannot be recovered, so each email carries a fresh one).
 2. Opening the link: resolve recipient, check envelope status, log `viewed`.
 3. OTP: 6 digits emailed to the recipient, hashed, 10-minute expiry, max 5
    attempts, then a new code is required. Rate-limited per recipient.
@@ -194,9 +202,9 @@ Failure: retry 3 times with backoff; then set `last_error` and show a
 
 Other jobs:
 - `send-email`: render the template (all user text HTML-escaped), send over SMTP with nodemailer; retry 5 times with backoff.
-- `reminder-tick` (cron hourly): recipients in `sent|viewed` whose
-  envelope has `reminder_every_days` and `last_reminded_at` older than it.
-- `expire-envelopes` (cron hourly): `sent` envelopes past `expires_at`.
+- `reminder-tick` (every 5 min): signers in `sent|viewed` whose envelope has
+  `reminder_every_days` and `coalesce(last_reminded_at, invited_at)` older than it.
+- `expire-envelopes` (every 5 min): `sent` envelopes past `expires_at`.
 
 ## 7. Audit log
 

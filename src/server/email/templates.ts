@@ -100,7 +100,7 @@ export function renderEmail<K extends EmailKind>(kind: K, data: EmailData[K]): R
     case "voided": {
       const d = data as EmailData["voided"];
       return layout(`Cancelled: "${d.title}"`, `Cancelled: ${d.title}`, [
-        { kind: "p", text: `${d.senderName} cancelled this envelope. You do not need to sign it. Their reason:` },
+        { kind: "p", text: `${d.senderName} cancelled this envelope, so it will not be completed and no further signatures are needed. Their reason:` },
         { kind: "quote", text: d.reason },
       ]);
     }
