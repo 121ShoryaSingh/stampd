@@ -10,7 +10,7 @@ async function readyEditor(page: Page) {
   const doc = await PDFDocument.create();
   doc.addPage([612, 792]);
   await page.getByTestId("pdf-input").setInputFiles({ name: "g.pdf", mimeType: "application/pdf", buffer: Buffer.from(await doc.save()) });
-  await expect(page.getByText("(1 pages)")).toBeVisible();
+  await expect(page.getByText(/1 pages/)).toBeVisible();
   await page.getByRole("link", { name: "Edit recipients and fields" }).click();
   await page.getByLabel("Recipient 1 name").fill("Gia Grid");
   await page.getByLabel("Recipient 1 email").fill("gia@e2e.dev");

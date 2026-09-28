@@ -34,7 +34,7 @@ export async function createAndSend(page: Page, title: string, signers: Signer[]
   const doc = await PDFDocument.create();
   doc.addPage([612, 792]).drawText("Agreement", { x: 50, y: 700 });
   await page.getByTestId("pdf-input").setInputFiles({ name: "a.pdf", mimeType: "application/pdf", buffer: Buffer.from(await doc.save()) });
-  await expect(page.getByText("(1 pages)")).toBeVisible();
+  await expect(page.getByText(/1 pages/)).toBeVisible();
 
   await page.getByRole("link", { name: "Edit recipients and fields" }).click();
   for (const [i, s] of signers.entries()) {

@@ -20,7 +20,7 @@ test("create an envelope, upload, add a signer, place a field, send", async ({ p
   await newEnvelope(page, "E2E Contract");
 
   await page.getByTestId("pdf-input").setInputFiles({ name: "contract.pdf", mimeType: "application/pdf", buffer: await pdfBuffer(2) });
-  await expect(page.getByText("(2 pages)")).toBeVisible();
+  await expect(page.getByText(/2 pages/)).toBeVisible();
 
   await page.getByRole("link", { name: "Edit recipients and fields" }).click();
   await page.getByLabel("Recipient 1 name").fill("Ann Signer");
@@ -37,14 +37,25 @@ test("create an envelope, upload, add a signer, place a field, send", async ({ p
   await expect(page.getByRole("status").filter({ hasText: "Saved 1 fields" })).toBeVisible();
 
   await page.getByRole("link", { name: "Back to envelope" }).click();
-  await expect(page.getByText("1 fields placed")).toBeVisible();
+  await expect(page.getByText(/1 fields placed/)).toBeVisible();
   await page.getByRole("button", { name: "Send for signature" }).click();
   await expect(page.getByText("Sent.")).toBeVisible();
   await expect(page.getByLabel("Signing link for ann@e2e.dev")).toHaveValue(/\/sign\//);
   await page.getByRole("button", { name: "Done" }).click();
   await expect(page.getByRole("button", { name: "Void envelope" })).toBeVisible();
 
-  await page.goto("/dashboard?status=sent");
+  // The document link is minted fresh on each click.
+  const doc = await page.request.get(page.url() + "/document", { maxRedirects: 0 });
+  expect(doc.status()).toBe(307);
+  expect(doc.headers()["location"]).toContain("/doc/");
+
+  await page.getByRole("button", { name: "Void envelope" }).click();
+  const dialog = page.getByRole("dialog", { name: "Void envelope" });
+  await dialog.getByLabel("Reason for voiding").fill("Sent by mistake");
+  await dialog.getByRole("button", { name: "Void", exact: true }).click();
+  await expect(page.getByText("Voided: Sent by mistake")).toBeVisible();
+
+  await page.goto("/dashboard?status=voided");
   await expect(page.getByRole("link", { name: "E2E Contract", exact: true })).toBeVisible();
 });
 
