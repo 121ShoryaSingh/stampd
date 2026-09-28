@@ -1,6 +1,16 @@
 import "server-only";
 
-export type EmailKind = "invite" | "reminder" | "otp" | "declined" | "completed" | "signed_copy" | "expired" | "voided";
+export type EmailKind =
+  | "invite"
+  | "reminder"
+  | "otp"
+  | "declined"
+  | "completed"
+  | "signed_copy"
+  | "expired"
+  | "voided"
+  | "team_invite"
+  | "password_reset";
 
 export type EmailData = {
   invite: { title: string; senderName: string; recipientName: string; message?: string | null; url: string; expiresAt: string };
@@ -11,6 +21,8 @@ export type EmailData = {
   signed_copy: { title: string; senderName: string; recipientName: string; url: string };
   expired: { title: string; envelopeUrl: string };
   voided: { title: string; senderName: string; reason: string };
+  team_invite: { workspaceName: string; inviterName: string; role: "admin" | "member"; url: string; expiresAt: string };
+  password_reset: { name: string; url: string };
 };
 
 export type RenderedEmail = { subject: string; text: string; html: string };
@@ -112,6 +124,22 @@ export function renderEmail<K extends EmailKind>(kind: K, data: EmailData[K]): R
       return layout(`Cancelled: "${d.title}"`, `Cancelled: ${d.title}`, [
         { kind: "p", text: `${d.senderName} cancelled this envelope, so it will not be completed and no further signatures are needed. Their reason:` },
         { kind: "quote", text: d.reason },
+      ]);
+    }
+    case "team_invite": {
+      const d = data as EmailData["team_invite"];
+      return layout(`${d.inviterName} invited you to ${d.workspaceName} on Stampd`, `Join ${d.workspaceName}`, [
+        { kind: "p", text: `${d.inviterName} invited you to join the ${d.workspaceName} workspace on Stampd as ${d.role === "admin" ? "an admin" : "a member"}.` },
+        { kind: "button", label: "Accept invitation", url: d.url },
+        { kind: "p", text: `Sign up or log in with this email address to accept. The invitation works until ${day(d.expiresAt)}.` },
+      ]);
+    }
+    case "password_reset": {
+      const d = data as EmailData["password_reset"];
+      return layout("Reset your Stampd password", "Reset your password", [
+        { kind: "p", text: `Hi ${d.name}, someone asked to reset the password for your Stampd account. If it was you, choose a new password here:` },
+        { kind: "button", label: "Choose a new password", url: d.url },
+        { kind: "p", text: "The link works for 1 hour. If you did not ask for this, ignore this email: your password stays the same." },
       ]);
     }
   }

@@ -84,6 +84,29 @@ describe("processDueEmails", () => {
     expect(d[s.links[0].recipientId]).toMatchObject({ kind: "invite", status: "failed", lastError: "421 try again later" });
   });
 
+  it("sends workspace emails without an envelope and account emails without a workspace", async () => {
+    const { createTenant } = await import("@/server/tenants/service");
+    const { createInvitation } = await import("@/server/team/service");
+    const { insertUser } = await import("../../../tests/helpers/db");
+    const owner = await insertUser(admin);
+    const { id: tenantId } = await createTenant({ userId: owner.id, name: "Mail Co" });
+    const invitee = `inv-${Date.now()}@x.dev`;
+    const { token } = await createInvitation({ tenantId, actorUserId: owner.id, email: invitee, role: "member" });
+    expect(await processDueEmails({ tenantId })).toEqual({ sent: 1, failed: 0, retried: 0 });
+    const invite = await lastMailTo(invitee);
+    expect(invite?.Subject).toContain("invited you to Mail Co");
+    expect(invite?.Text).toContain(`/invite/${token}`);
+
+    const { queueAccountEmail } = await import("./outbox");
+    const resetTo = `pw-${Date.now()}@x.dev`;
+    await queueAccountEmail({ kind: "password_reset", toEmail: resetTo, toName: "Pat", data: { name: "Pat", url: "https://s.test/api/auth/reset-password/tok123?callbackURL=%2Freset-password" } });
+    expect((await processDueEmails({ tenantId: null })).sent).toBeGreaterThanOrEqual(1);
+    expect((await lastMailTo(resetTo))?.Text).toContain("reset-password/tok123");
+    const job = await admin.emailJob.findFirstOrThrow({ where: { toEmail: resetTo } });
+    expect(job.status).toBe("sent");
+    expect(job.data).not.toHaveProperty("url");
+  });
+
   it("scrubs the code from a sent code email", async () => {
     const s = await sentEnvelope(admin);
     const { requestCode } = await import("@/server/signing/service");

@@ -11,6 +11,8 @@ const samples: { [K in EmailKind]: EmailData[K] } = {
   signed_copy: { title: evil, senderName: evil, recipientName: evil, url: "https://s3.test/signed.pdf?sig=1" },
   expired: { title: evil, envelopeUrl: "https://s.test/envelopes/1" },
   voided: { title: evil, senderName: evil, reason: evil },
+  team_invite: { workspaceName: evil, inviterName: evil, role: "member", url: "https://s.test/invite/abc", expiresAt: "2026-10-01T00:00:00Z" },
+  password_reset: { name: evil, url: "https://s.test/api/auth/reset-password/abc?callbackURL=%2Freset-password" },
 };
 
 describe("escapeHtml", () => {

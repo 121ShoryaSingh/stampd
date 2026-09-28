@@ -4,6 +4,10 @@ import { withDb, withTenant, type Tx } from "@/server/db/context";
 import type { Role } from "@/server/db/types";
 import { ConflictError, ForbiddenError, NotFoundError } from "@/server/errors";
 import { normalizeEmail } from "./email";
+import { enqueueEmail } from "@/server/email/outbox";
+import { env } from "@/server/env";
+
+export const inviteUrl = (token: string) => `${env.BETTER_AUTH_URL}/invite/${token}`;
 
 export const INVITE_TTL_DAYS = 7;
 
@@ -50,6 +54,14 @@ export async function createInvitation(i: { tenantId: string; actorUserId: strin
         invitedBy: i.actorUserId,
         expiresAt: new Date(Date.now() + INVITE_TTL_DAYS * 86_400_000),
       },
+    });
+    const tenant = await tx.tenant.findUniqueOrThrow({ where: { id: i.tenantId }, select: { name: true } });
+    const inviter = await tx.user.findUniqueOrThrow({ where: { id: i.actorUserId }, select: { name: true } });
+    await enqueueEmail(tx, {
+      tenantId: i.tenantId,
+      kind: "team_invite",
+      toEmail: email,
+      data: { workspaceName: tenant.name, inviterName: inviter.name, role: i.role, url: inviteUrl(token), expiresAt: row.expiresAt.toISOString() },
     });
     return { invitationId: row.id, token };
   });

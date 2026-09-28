@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { fillSignup } from "./helpers";
+import { waitForMail } from "./mail";
 
 const stamp = Date.now();
 const owner = { name: "Olive Owner", email: `owner-${stamp}@e2e.dev`, password: "correct-horse-1" };
@@ -17,9 +18,14 @@ test("owner creates a workspace, invites a teammate who joins", async ({ browser
   await ownerPage.goto("/settings/team");
   // Upper case on purpose: invites must match emails case-insensitively.
   await ownerPage.getByLabel("Email", { exact: true }).fill(mate.email.toUpperCase());
+  const since = new Date();
   await ownerPage.getByRole("button", { name: "Invite" }).click();
+  await expect(ownerPage.getByText(`Invitation emailed to ${mate.email}`)).toBeVisible();
   const inviteUrl = await ownerPage.getByTestId("invite-url").inputValue();
   expect(inviteUrl).toContain("/invite/");
+  // The same link arrives by email.
+  const mail = await waitForMail(mate.email, since, /invited you to E2E Co/);
+  expect(mail.text).toContain(inviteUrl);
 
   const matePage = await (await browser.newContext()).newPage();
   await matePage.goto(inviteUrl);

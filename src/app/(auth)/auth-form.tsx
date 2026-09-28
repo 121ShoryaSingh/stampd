@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { authClient } from "@/lib/auth-client";
+import { useHydrated } from "@/lib/use-hydrated";
 import { safeNext } from "@/server/auth/safe-next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +14,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const router = useRouter();
   const params = useSearchParams();
   const next = safeNext(params.get("next"));
+  const hydrated = useHydrated();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -39,6 +41,11 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   return (
     <Card>
       <h1 className="font-display text-4xl">{mode === "login" ? "Welcome back." : "Start signing."}</h1>
+      {mode === "login" && params.get("reset") && (
+        <p role="status" className="border-brutal mt-6 bg-green p-3 font-bold">
+          Password changed. Log in with your new password.
+        </p>
+      )}
       <form onSubmit={onSubmit} className="mt-6 space-y-4">
         {mode === "signup" && <Input label="Your name" name="name" required minLength={2} autoComplete="name" />}
         <Input label="Work email" name="email" type="email" required autoComplete="email" />
@@ -51,9 +58,16 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
           autoComplete={mode === "login" ? "current-password" : "new-password"}
         />
         {error && <p role="alert" className="border-brutal bg-red p-3 font-bold text-ink">{error}</p>}
-        <Button variant="primary" type="submit" disabled={pending} className="w-full justify-center">
+        <Button variant="primary" type="submit" disabled={pending || !hydrated} className="w-full justify-center">
           {pending ? "Working..." : mode === "login" ? "Log in" : "Create account"}
         </Button>
+        {mode === "login" && (
+          <p className="text-sm">
+            <Link href="/forgot-password" className="font-bold underline">
+              Forgot password?
+            </Link>
+          </p>
+        )}
       </form>
       <p className="mt-6 text-sm">
         {mode === "login" ? "New here? " : "Have an account? "}

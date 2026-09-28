@@ -25,7 +25,9 @@ export function InviteForm() {
       {state.error && <p role="alert" className="border-brutal w-full bg-red p-3 font-bold text-ink">{state.error}</p>}
       {state.inviteUrl && (
         <div className="border-brutal w-full bg-green p-3">
-          <p className="font-bold">Invite created. Send this link to your teammate:</p>
+          <p className="font-bold" role="status">
+            Invitation emailed to {state.invited}. You can also share this link with them:
+          </p>
           <input
             readOnly
             value={state.inviteUrl}

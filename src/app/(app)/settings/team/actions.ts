@@ -4,11 +4,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireTenant } from "@/server/tenants/current";
-import { createInvitation, changeRole, removeMember, revokeInvitation } from "@/server/team/service";
+import { createInvitation, changeRole, inviteUrl, removeMember, revokeInvitation } from "@/server/team/service";
 import { DomainError } from "@/server/errors";
-import { env } from "@/server/env";
 
-type State = { error?: string; inviteUrl?: string };
+type State = { error?: string; inviteUrl?: string; invited?: string };
 const RoleSchema = z.enum(["admin", "member"]);
 
 export async function inviteAction(_prev: State, form: FormData): Promise<State> {
@@ -20,7 +19,8 @@ export async function inviteAction(_prev: State, form: FormData): Promise<State>
   try {
     const { token } = await createInvitation({ tenantId: tenant.tenantId, actorUserId: session.user.id, ...parsed.data });
     revalidatePath("/settings/team");
-    return { inviteUrl: `${env.BETTER_AUTH_URL}/invite/${token}` }; // emailed once the worker exists
+    // Emailed by the worker; the link is also shown once so it can be shared another way.
+    return { invited: parsed.data.email.trim().toLowerCase(), inviteUrl: inviteUrl(token) };
   } catch (e) {
     if (e instanceof DomainError) return { error: e.message };
     throw e;

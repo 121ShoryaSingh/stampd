@@ -57,3 +57,24 @@ describe("worker discovery flag", () => {
     expect(env.count).toBe(0);
   });
 });
+
+describe("account emails (no workspace)", () => {
+  it("the app can queue one, tenants cannot see it, and only the worker can update it", async () => {
+    const { queueAccountEmail } = await import("@/server/email/outbox");
+    const to = `reset-${Date.now()}@x.dev`;
+    await queueAccountEmail({ kind: "password_reset", toEmail: to, data: { name: "R", url: "https://s.test/reset/secret" } });
+    const job = await admin.emailJob.findFirstOrThrow({ where: { toEmail: to } });
+    expect(job.tenantId).toBeNull();
+
+    expect(await withTenant(a, (tx) => tx.emailJob.count({ where: { id: job.id } }))).toBe(0);
+    expect(await withDb({}, (tx) => tx.emailJob.count({ where: { id: job.id } }))).toBe(0);
+    expect((await withDb({}, (tx) => tx.emailJob.updateMany({ where: { id: job.id }, data: { lastError: "x" } }))).count).toBe(0);
+    expect(await withDb({ worker: true }, (tx) => tx.emailJob.count({ where: { id: job.id } }))).toBe(1);
+    expect((await withDb({ worker: true }, (tx) => tx.emailJob.updateMany({ where: { id: job.id }, data: { lastError: "ok" } }))).count).toBe(1);
+  });
+
+  it("cannot be used to attach a workspace-less job to an envelope", async () => {
+    await expect(withDb({}, (tx) => tx.emailJob.create({ data: { envelopeId: envA, kind: "completed", toEmail: "x@x.dev" } }))).rejects.toThrow();
+    await expect(withDb({ worker: true }, (tx) => tx.emailJob.create({ data: { tenantId: a, kind: "completed", toEmail: "x@x.dev" } }))).rejects.toThrow();
+  });
+});

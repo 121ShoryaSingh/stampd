@@ -304,10 +304,11 @@ enum EmailStatus {
 }
 
 // Transactional outbox: written with the state change, sent by the worker.
+// No envelope: team invitations. No tenant either: account emails (password reset).
 model EmailJob {
   id          String      @id @default(uuid(7)) @db.Uuid
-  tenantId    String      @map("tenant_id") @db.Uuid
-  envelopeId  String      @map("envelope_id") @db.Uuid
+  tenantId    String?     @map("tenant_id") @db.Uuid
+  envelopeId  String?     @map("envelope_id") @db.Uuid
   recipientId String?     @map("recipient_id") @db.Uuid
   kind        String
   toEmail     String      @map("to_email")
@@ -320,7 +321,7 @@ model EmailJob {
   lastError   String?     @map("last_error")
   sentAt      DateTime?   @map("sent_at") @db.Timestamptz
   createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz
-  envelope    Envelope    @relation(fields: [envelopeId], references: [id], onDelete: Cascade)
+  envelope    Envelope?   @relation(fields: [envelopeId], references: [id], onDelete: Cascade)
 
   @@index([status, runAt])
   @@index([envelopeId])
