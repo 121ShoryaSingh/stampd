@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
-import { PdfCanvas } from "./pdf-canvas";
+import { PdfCanvas } from "@/components/pdf/pdf-canvas";
 import { saveFieldsAction } from "./actions";
 import { Button } from "@/components/ui/button";
 import { clampBox, DEFAULT_FIELD_SIZE, type Box, type FieldKind } from "@/lib/fields/geometry";
