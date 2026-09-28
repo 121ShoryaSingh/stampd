@@ -23,6 +23,16 @@
 - S3 object keys: `t/<tenantId>/e/<envelopeId>/<uuid>.pdf`.
 - Signer links are `<BETTER_AUTH_URL>/sign/<token>`; the token is 32 random bytes base64url, only its SHA-256 is stored. (The signer page itself is Plan 3; emails are Plan 4, so this plan shows links in the UI.)
 
+## Prisma translation (applies to every task below)
+
+Plan 1b replaced Drizzle with Prisma (user direction). Code blocks below were drafted for Drizzle; implement them with the same behavior using these rules:
+- Import `withTenant`, `withDb`, `Tx` from `@/server/db/context`; types from `@/server/db/types`; models via `tx.envelope`, `tx.recipient`, etc.
+- No raw SQL. `lockDraft(tx, id)` = `tx.envelope.updateMany({ where: { id, status: "draft" }, data: { updatedAt: new Date() } })`; count 0 -> `NotFoundError` if the row is missing, else `InvalidStateError`. `lockEnvelope` = same without the status filter.
+- Audit append: `tx.envelope.update({ where: { id }, data: { auditSeq: { increment: 1 } } })` (row lock + next seq), read the previous event by `seq`, insert with `seq`. Order by `seq`, not `id`.
+- Counts: `_count: { select: { recipients: { where: {...} } } }` and `groupBy` instead of SQL subqueries.
+- Test seeding uses `adminDb()` and `seedDraft(admin, ...)` from `tests/helpers`, never SQL strings.
+- Task 2 is already delivered by the Plan 1b commit.
+
 ## Review Focus
 
 1. A file that is not really a PDF (renamed `.txt`, truncated, or garbage bytes) must be rejected with a clear message and leave no document row. Pinned in Task 4 (`finalizeUpload` rejects non-PDF and corrupt bytes).
