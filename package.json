@@ -1,5 +1,5 @@
 {
-  "name": "stampd-scaffold",
+  "name": "stampd",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -10,7 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx --env-file=.env.local scripts/migrate.ts",
+    "db:migrate": "tsx --env-file=.env.local scripts/migrate.mts",
     "e2e": "playwright test"
   },
   "dependencies": {
