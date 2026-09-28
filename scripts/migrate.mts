@@ -1,4 +1,4 @@
-import { runMigrations } from "../src/server/db/migrate.ts";
+import { runMigrations } from "../src/server/db/migrate";
 
 const url = process.env.MIGRATOR_DATABASE_URL;
 if (!url) throw new Error("MIGRATOR_DATABASE_URL is not set");
