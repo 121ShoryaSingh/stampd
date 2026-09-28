@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Loaded at runtime so its optional GCS/Azure SDK requires are not bundled.
+  serverExternalPackages: ["@khair/storage-adapter"],
 };
 
 export default nextConfig;
