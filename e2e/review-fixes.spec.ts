@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { createAndSend, enterCode, newUser, signUpWithWorkspace } from "./helpers";
+import { createAndSend, enterCode, newUser, settle, signUpWithWorkspace } from "./helpers";
 import { signingCode } from "./mail";
 
 async function toSignStep(page: Page, email: string) {
@@ -85,6 +85,7 @@ test("leaving the editor with unsaved fields asks first", async ({ page }) => {
   await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Team" }).click();
   expect(asked).toBe(true);
   await expect(page).toHaveURL(/\/edit$/);
+  await settle(page);
   expect(await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).exclude("canvas").analyze().then((r) => r.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id))).toEqual([]);
 });
 
@@ -103,6 +104,7 @@ test("signing works with the keyboard and the sign step passes axe", async ({ pa
   await signer.getByRole("button", { name: "I agree" }).focus();
   await signer.keyboard.press("Enter");
   await expect(signer.getByRole("button", { name: "signature field" })).toBeVisible();
+  await settle(signer);
   const bad = (await new AxeBuilder({ page: signer }).withTags(["wcag2a", "wcag2aa"]).exclude("canvas").analyze()).violations.filter((v) => v.impact === "serious" || v.impact === "critical");
   expect(bad.map((v) => v.id)).toEqual([]);
 

@@ -72,3 +72,11 @@ export async function enterCode(page: Page, email: string) {
   await page.getByLabel("Code").fill(await signingCode(email, since));
   await page.getByRole("button", { name: "Verify" }).click();
 }
+
+// Waits for entrance animations (fades, slides) to finish, so contrast is measured on the final colors.
+// Endless animations (skeleton shimmer, marquee) are ignored.
+export async function settle(page: Page) {
+  await page.waitForFunction(() =>
+    document.getAnimations().every((a) => a.playState !== "running" || a.effect?.getComputedTiming().iterations === Infinity),
+  );
+}

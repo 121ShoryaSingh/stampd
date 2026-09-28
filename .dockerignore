@@ -1,0 +1,14 @@
+.git
+node_modules
+.next
+dist
+.tmp
+.secrets
+*.p12
+*.pfx
+.env*
+!.env.example
+test-results
+playwright-report
+coverage
+public/pdf.worker.min.mjs

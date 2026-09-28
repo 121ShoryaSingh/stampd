@@ -1,5 +1,6 @@
 // Background worker: seals completed envelopes, sends queued email, and runs the reminder and expiry ticks.
 // Run with `npm run worker` (dev) next to `npm run dev`.
+import { writeFileSync } from "node:fs";
 import { prisma } from "@/server/db/client";
 import { emailConfigured } from "@/server/email/mailer";
 import { processDueEmails } from "@/server/email/outbox";
@@ -7,6 +8,8 @@ import { processDueFinalizations, sealConfigured, sealKey } from "@/server/final
 import { expireDue, remindDue } from "@/server/jobs/ticks";
 
 const EMAIL_EVERY_MS = 2_000;
+// Touched every loop; the container health check fails if it goes stale.
+const HEARTBEAT = process.env.WORKER_HEARTBEAT_FILE ?? "/tmp/stampd-worker-heartbeat";
 const TICK_EVERY_MS = 300_000;
 
 let stopping = false;
@@ -49,6 +52,11 @@ async function main() {
     }
     await safely("seal", () => processDueFinalizations());
     await safely("email", () => processDueEmails());
+    try {
+      writeFileSync(HEARTBEAT, new Date().toISOString());
+    } catch {
+      // A read-only filesystem only disables the health check.
+    }
     if (!stopping) await sleep(EMAIL_EVERY_MS);
   }
   await prisma.$disconnect();

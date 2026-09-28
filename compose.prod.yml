@@ -1,0 +1,135 @@
+# Production stack for one small server (e.g. Hetzner CX22: 2 vCPU, 4 GB RAM + 2 GB swap).
+#   docker compose -f compose.prod.yml --env-file .env.production up -d --build
+# See DEPLOY.md for first-time setup, backups and updates.
+name: stampd-prod # distinct from the dev stack (compose.dev.yml), so they never share volumes
+
+x-app: &app
+  image: ${STAMPD_IMAGE:-stampd:latest}
+  env_file: .env.production
+  restart: unless-stopped
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+  networks: [db, edge]
+
+x-db-url: &db-url postgres://stampd_app:${APP_DB_PASSWORD:?set APP_DB_PASSWORD}@postgres:5432/stampd
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+      MIGRATOR_DB_PASSWORD: ${MIGRATOR_DB_PASSWORD:?set MIGRATOR_DB_PASSWORD}
+    # Tuned for a 4 GB host.
+    command: [postgres, -c, shared_buffers=1GB, -c, max_connections=50, -c, effective_cache_size=2GB, -c, work_mem=8MB, -c, maintenance_work_mem=128MB, -c, random_page_cost=1.1, -c, wal_compression=on]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init-roles.sh:/docker-entrypoint-initdb.d/00-roles.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d stampd"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    shm_size: 256m
+    mem_limit: 1536m
+    cpus: 1.0
+    networks: [db] # no published port, no internet
+
+  # Applies pending migrations, then exits; web and worker wait for it.
+  migrate:
+    image: ${STAMPD_MIGRATE_IMAGE:-stampd-migrate:latest}
+    build: { context: ., target: migrate }
+    env_file: .env.production # also used for one-off scripts (storage:init, seal:dev-cert)
+    environment:
+      MIGRATOR_DATABASE_URL: postgres://stampd_migrator:${MIGRATOR_DB_PASSWORD}@postgres:5432/stampd
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    mem_limit: 512m
+    networks: [db, edge]
+
+  web:
+    <<: *app
+    build: { context: ., target: runtime }
+    environment:
+      DATABASE_URL: *db-url
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3100/api/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    mem_limit: 768m
+    cpus: 1.0
+
+  worker:
+    <<: *app
+    command: ["node", "--conditions=react-server", "dist/worker.mjs"]
+    environment:
+      DATABASE_URL: *db-url
+      SEAL_P12_PATH: /run/secrets/seal_p12
+    secrets: [seal_p12]
+    healthcheck:
+      test: ["CMD", "node", "-e", "process.exit(Date.now() - require('fs').statSync('/tmp/stampd-worker-heartbeat').mtimeMs < 60000 ? 0 : 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    mem_limit: 768m # sealing a large PDF holds it in memory
+    cpus: 1.0
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443", "443:443/udp"]
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+    mem_limit: 256m
+    cpus: 0.5
+    networks: [edge]
+
+  # Nightly pg_dump to off-box S3 storage (use credentials that can only add objects).
+  backup:
+    image: ${STAMPD_BACKUP_IMAGE:-stampd-backup:latest}
+    build: { context: ., target: backup }
+    restart: unless-stopped
+    environment:
+      PGURL: postgres://stampd_migrator:${MIGRATOR_DB_PASSWORD}@postgres:5432/stampd
+      BACKUP_S3_BUCKET: ${BACKUP_S3_BUCKET:?set BACKUP_S3_BUCKET}
+      BACKUP_S3_ENDPOINT: ${BACKUP_S3_ENDPOINT:-}
+      BACKUP_S3_REGION: ${BACKUP_S3_REGION:-auto}
+      BACKUP_S3_PREFIX: ${BACKUP_S3_PREFIX:-stampd}
+      BACKUP_S3_ACCESS_KEY: ${BACKUP_S3_ACCESS_KEY:?set BACKUP_S3_ACCESS_KEY}
+      BACKUP_S3_SECRET_KEY: ${BACKUP_S3_SECRET_KEY:?set BACKUP_S3_SECRET_KEY}
+      BACKUP_HOUR_UTC: ${BACKUP_HOUR_UTC:-2}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    mem_limit: 256m
+    cpus: 0.5
+    networks: [db, edge]
+
+secrets:
+  seal_p12:
+    file: ${SEAL_P12_FILE:-./secrets/seal.p12} # must be readable by uid 1000 (the node user)
+
+networks:
+  db:
+    internal: true
+  edge: {}
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

@@ -265,6 +265,10 @@ Docker Compose on a Hetzner CX22 per earlier decision: `web`, `worker`,
 off-box storage with append-only credentials, restore tested once.
 Local development: `docker compose -f compose.dev.yml` for Postgres and
 MinIO (S3), `next dev` and `tsx watch src/worker/index.ts` on the host.
+Implementation (Plan 7): `compose.prod.yml` and `DEPLOY.md`. The web container
+runs `next start`; the worker is an esbuild bundle; backups use a Node tool on
+the Debian postgres:16 image (`pg_dump` to S3, `check` restores into a scratch
+database). Local dev uses RustFS instead of MinIO.
 
 ## 12. Open items
 

@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { settle } from "./helpers";
 
 const PAGES = [
   { path: "/security", heading: "Security" },
@@ -13,6 +14,7 @@ for (const p of PAGES) {
     await page.setViewportSize({ width: 375, height: 800 });
     await page.goto(p.path);
     await expect(page.getByRole("heading", { level: 1, name: p.heading })).toBeVisible();
+    await settle(page);
     const bad = (await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze()).violations.filter((v) => v.impact === "serious" || v.impact === "critical");
     expect(bad.map((v) => v.id)).toEqual([]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

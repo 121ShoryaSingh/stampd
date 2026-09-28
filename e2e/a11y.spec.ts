@@ -1,8 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { createAndSend, newUser, signUpWithWorkspace } from "./helpers";
+import { createAndSend, newUser, settle, signUpWithWorkspace } from "./helpers";
 
 async function axe(page: Page, where: string) {
+  await settle(page);
   const res = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).exclude("canvas").analyze();
   const bad = res.violations.filter((v) => v.impact === "serious" || v.impact === "critical");
   expect(bad.map((v) => `${where}: ${v.id} (${v.nodes.length}) ${v.nodes[0]?.target.join(" ")}`)).toEqual([]);

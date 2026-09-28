@@ -46,8 +46,9 @@ test("asking for a reset for an unknown email looks the same", async ({ page }) 
 });
 
 test("the login form cannot be submitted before the page is ready", async ({ page }) => {
-  // A plain HTML submit would put the password in the URL; the button waits for JavaScript.
+  // A plain HTML submit would put the password in the URL. Without JavaScript the button is
+  // disabled (dev renders the form on the server) or not rendered at all (production build).
   await page.route("**/_next/static/**", (route) => route.abort());
   await page.goto("/login");
-  await expect(page.getByRole("button", { name: "Log in" })).toBeDisabled();
+  await expect(page.locator("form button[type=submit]:not([disabled])")).toHaveCount(0);
 });
