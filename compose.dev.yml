@@ -14,6 +14,10 @@ services:
       RUSTFS_SECRET_KEY: stampd-s3-secret
     ports: ["127.0.0.1:9100:9000"]
     volumes: [s3data:/data]
+  # Local mail catcher: SMTP on 1025, inbox at http://localhost:8025
+  mailpit:
+    image: axllent/mailpit:latest
+    ports: ["127.0.0.1:1025:1025", "127.0.0.1:8025:8025"]
 volumes:
   pgdata:
   s3data:

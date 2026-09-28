@@ -1,36 +1,25 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Stampd
 
-## Getting Started
+Multi-tenant e-signature app (Next.js, Prisma, Postgres RLS, S3 storage). Design: `docs/superpowers/specs/2026-09-28-stampd-design.md`.
 
-First, run the development server:
+## Local development
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env.local          # then fill in the blanks
+docker compose -f compose.dev.yml up -d   # Postgres, RustFS (S3), Mailpit
+npm install
+npm run db:migrate
+npm run storage:init
+npm run dev                          # web app on http://localhost:3100
+npm run worker                       # sends email, reminders and expiry (second terminal)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Email goes out only through the worker. With the Mailpit settings in `.env.example`, every email lands in the inbox at http://localhost:8025.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Tests
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm test        # unit + integration (Testcontainers: Postgres, RustFS, Mailpit; needs Docker)
+npm run e2e     # Playwright; needs the dev compose stack running
+npm run lint
+```
