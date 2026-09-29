@@ -16,7 +16,8 @@
     "e2e": "playwright test",
     "storage:init": "tsx --env-file=.env.local scripts/storage-init.mts",
     "seal:dev-cert": "tsx scripts/seal-dev-cert.mts",
-    "postinstall": "prisma generate && node -e \"require('fs').copyFileSync('node_modules/pdfjs-dist/build/pdf.worker.min.mjs','public/pdf.worker.min.mjs')\""
+    "postinstall": "prisma generate && node -e \"require('fs').copyFileSync('node_modules/pdfjs-dist/build/pdf.worker.min.mjs','public/pdf.worker.min.mjs')\"",
+    "admin:create": "tsx --conditions=react-server --env-file-if-exists=.env.local scripts/create-admin.mts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1141.0",
