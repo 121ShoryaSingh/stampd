@@ -22,6 +22,7 @@ model User {
   memberships   Membership[]
   invitations   Invitation[]
   envelopes     Envelope[]
+  presets       Preset[]
 
   @@map("user")
 }
@@ -88,6 +89,7 @@ model Tenant {
   memberships Membership[]
   invitations Invitation[]
   envelopes   Envelope[]
+  presets     Preset[]
 
   @@map("tenants")
 }
@@ -327,4 +329,76 @@ model EmailJob {
   @@index([status, runAt])
   @@index([envelopeId])
   @@map("email_jobs")
+}
+
+enum PresetStatus {
+  active
+  archived
+
+  @@map("preset_status")
+}
+
+// A reusable envelope: one PDF, roles, and fields placed for those roles.
+model Preset {
+  id          String       @id @default(uuid(7)) @db.Uuid
+  tenantId    String       @map("tenant_id") @db.Uuid
+  createdBy   String       @map("created_by")
+  name        String
+  description String?
+  message     String?
+  status      PresetStatus @default(active)
+  version     Int          @default(1)
+  usageCount  Int          @default(0) @map("usage_count")
+  lastUsedAt  DateTime?    @map("last_used_at") @db.Timestamptz
+  filename    String?
+  s3Key       String?      @map("s3_key")
+  sha256      String?
+  pageCount   Int          @default(0) @map("page_count")
+  pageSizes   Json         @default("[]") @map("page_sizes")
+  sizeBytes   Int          @default(0) @map("size_bytes")
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  creator     User         @relation(fields: [createdBy], references: [id])
+  roles       PresetRole[]
+  fields      PresetField[]
+
+  @@index([tenantId, status])
+  @@map("presets")
+}
+
+model PresetRole {
+  id           String        @id @default(uuid(7)) @db.Uuid
+  tenantId     String        @map("tenant_id") @db.Uuid
+  presetId     String        @map("preset_id") @db.Uuid
+  label        String
+  role         RecipientRole @default(signer)
+  routingOrder Int           @default(1) @map("routing_order")
+  defaultName  String?       @map("default_name")
+  defaultEmail String?       @map("default_email")
+  position     Int           @default(0)
+  preset       Preset        @relation(fields: [presetId], references: [id], onDelete: Cascade)
+  fields       PresetField[]
+
+  @@index([presetId])
+  @@map("preset_roles")
+}
+
+model PresetField {
+  id           String     @id @default(uuid(7)) @db.Uuid
+  tenantId     String     @map("tenant_id") @db.Uuid
+  presetId     String     @map("preset_id") @db.Uuid
+  presetRoleId String     @map("preset_role_id") @db.Uuid
+  type         FieldType
+  page         Int
+  x            Float
+  y            Float
+  w            Float
+  h            Float
+  required     Boolean    @default(true)
+  preset       Preset     @relation(fields: [presetId], references: [id], onDelete: Cascade)
+  role         PresetRole @relation(fields: [presetRoleId], references: [id], onDelete: Cascade)
+
+  @@index([presetId])
+  @@map("preset_fields")
 }
