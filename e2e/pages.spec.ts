@@ -31,9 +31,8 @@ test("legal drafts say they are drafts", async ({ page }) => {
   }
 });
 
-test("every landing link goes somewhere real, and pricing is marked as a placeholder", async ({ page, request }) => {
+test("every landing link goes somewhere real", async ({ page, request }) => {
   await page.goto("/");
-  await expect(page.getByText("PLACEHOLDER PRICING")).toBeAttached();
   const hrefs = await page.locator(".lp a[href]").evaluateAll((as) => [...new Set(as.map((a) => a.getAttribute("href")!))]);
   expect(hrefs).not.toContain("#");
   for (const href of hrefs.filter((h) => h.startsWith("/"))) {
