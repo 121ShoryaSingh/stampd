@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FileSignature, Menu, Plus, Users } from "lucide-react";
+import { FileSignature, LayoutTemplate, Menu, Plus, Users } from "lucide-react";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 import { UserMenu } from "./user-menu";
 import { Modal } from "@/components/ui/modal";
@@ -12,6 +12,7 @@ import type { UserTenant } from "@/server/tenants/pick";
 
 const NAV = [
   { href: "/dashboard", label: "Envelopes", Icon: FileSignature, match: ["/dashboard", "/envelopes"] },
+  { href: "/presets", label: "Presets", Icon: LayoutTemplate, match: ["/presets"] },
   { href: "/settings/team", label: "Team", Icon: Users, match: ["/settings/team"] },
 ];
 

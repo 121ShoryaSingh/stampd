@@ -15,6 +15,8 @@ import { PageHeader } from "@/components/ui/layout";
 import { StatusPill } from "@/components/app/status-pill";
 import { UploadForm } from "./upload-form";
 import { SendForm } from "./send-form";
+import { SavePresetButton } from "./save-preset";
+import { listPresets } from "@/server/presets/service";
 import { AutoRefresh, ResendButton, Thumbnail, VoidButton } from "./parts";
 import { deleteDraftAction, retryFinalizeAction } from "./actions";
 import { describeEvent, relativeTime } from "./activity";
@@ -43,6 +45,9 @@ export default async function EnvelopePage({ params, searchParams }: { params: P
   const canResend = envelope.status === "sent" && !!envelope.expiresAt && envelope.expiresAt > new Date();
   const thumbUrl = document ? await presignGet(document.s3Key, 600) : null;
   const isDraft = envelope.status === "draft";
+  // Admins can turn a ready draft into a workspace preset.
+  const canSavePreset = isDraft && tenant.role === "admin" && !!document && recipients.length > 0;
+  const presets = canSavePreset ? (await listPresets(tenant.tenantId)).map((p) => ({ id: p.id, name: p.name })) : [];
   const names = new Map(recipients.map((r) => [r.id, r.name]));
   const signers = recipients.filter((r) => r.role === "signer");
   const steps = [...new Set(signers.map((s) => s.routingOrder))].sort((a, b) => a - b);
@@ -66,6 +71,7 @@ export default async function EnvelopePage({ params, searchParams }: { params: P
                 <PenLine aria-hidden className="h-4 w-4" /> Edit recipients and fields
               </Link>
             )}
+            {canSavePreset && <SavePresetButton envelopeId={id} title={envelope.title} presets={presets} />}
             {envelope.status === "sent" && <VoidButton envelopeId={id} />}
             {isDraft && (
               <form action={deleteDraftAction}>
