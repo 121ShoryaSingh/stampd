@@ -26,7 +26,8 @@ In scope (v1):
 - Envelopes containing one PDF document (multi-document later).
 - Recipients with a routing order. Same order number = sign in parallel.
   Recipient roles: `signer`, `cc` (receives the final PDF only).
-- Field types: signature, initials, date signed (auto), text, checkbox.
+- Field types: signature, initials, date signed (auto), text, checkbox, Yes/No choice.
+- Workspace presets: reusable PDF + roles + fields, private to one workspace (section 13).
 - Signer flow via emailed magic link + 6-digit email OTP; draw, type or
   upload a signature; explicit consent to sign electronically.
 - Automatic reminders (interval in days) and envelope expiry.
@@ -35,7 +36,7 @@ In scope (v1):
 - Hash-chained, append-only audit log.
 - Marketing site (Neo-Brutalist, GSAP), per the approved mockup.
 
-Out of scope (v1): templates, billing/Stripe, public API/webhooks, bulk send,
+Out of scope (v1): billing/Stripe, public API/webhooks, bulk send,
 SMS OTP, in-person signing, custom branding/subdomains, Aadhaar eSign or
 eIDAS qualified signatures, multiple documents per envelope, document editing.
 
@@ -278,3 +279,48 @@ database). Local dev uses RustFS instead of MinIO.
 - RFC 3161 timestamp authority choice (free TSA for v1, paid later).
 - Legal review of consent text, terms and the FAQ e-sign law answer before launch.
 - Plan 4 must require a verified email before a user can accept an invitation (found in Plan 1 review).
+
+## 13. Workspace presets
+
+A preset is a reusable envelope: one PDF, named roles, and fields placed
+against those roles. Presets belong to one workspace (tenant) and are
+invisible to every other workspace, enforced by RLS like envelopes.
+
+Data:
+- `presets`: tenant_id, name, description, status (active | archived),
+  version, usage_count, last_used_at, created_by, message, document columns
+  (filename, s3_key, sha256, page_count, page_sizes, size_bytes).
+- `preset_roles`: tenant_id, preset_id, label (e.g. "Client"), role
+  (signer | cc), routing_order, optional default_name / default_email.
+- `preset_fields`: tenant_id, preset_id, preset_role_id, type, page, x, y,
+  w, h, required. Same shape and rules as envelope fields.
+
+Management (same as Horizon Admin's presets; admins only, members can use):
+- Presets page (`/presets`): search, active/archived tabs, sorted by usage
+  then name, each row shows roles, page count, version, usage, last used.
+- New preset: name + description, upload a PDF (same checks as envelopes),
+  then the preset editor. The editor is the envelope editor with roles in
+  place of recipients: add/rename/reorder roles (signer | cc, order, optional
+  default name/email) and place fields for each role.
+- Edit preset: same editor. Saving roles or fields bumps `version`;
+  name/description edits do not. Replacing the PDF drops fields that no
+  longer fit its pages (same pruning as envelopes).
+- Duplicate: copies PDF, roles and fields into a new preset "<name> (copy)",
+  version 1, usage 0.
+- Save as preset: from a draft envelope with a document and recipients.
+  Each recipient becomes a role (label = recipient name, default email =
+  recipient email). It can also replace an existing preset (version bump).
+- Archive / restore. Archived presets are hidden from "Use" but kept.
+  Presets are never hard-deleted in v1.
+- The preset owns its own copy of the PDF (`t/<tenant>/p/<preset>/doc/<uuid>.pdf`),
+  so deleting a draft or envelope never breaks a preset, and vice versa.
+
+Use:
+- "New envelope" offers "Start from a preset". The sender picks a preset,
+  enters a title and a name + email per role (defaults prefilled).
+- This creates a normal draft envelope with its own copy of the PDF,
+  recipients and fields, audits `created_from_preset` with the preset id and
+  version, and bumps usage_count / last_used_at. The draft is then reviewed,
+  adjusted and sent like any other.
+- A preset with a signer role that has no fields cannot be used (the draft
+  could not be sent).
