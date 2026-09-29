@@ -4,7 +4,8 @@ export type Handle = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
 export type Guides = { v: number[]; h: number[] };
 
 // Smallest field side, as a fraction of the page.
-export const MIN_SIZE = 0.01;
+// Small enough for a printed tick box (about 3 pt).
+export const MIN_SIZE = 0.005;
 // Fine grid: 80 cells across; a bold line every 8 cells.
 export const GRID_STEP = 0.0125;
 export const GRID_MAJOR_EVERY = 8;

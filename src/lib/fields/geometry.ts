@@ -7,13 +7,13 @@ export const DEFAULT_FIELD_SIZE: Record<FieldKind, { w: number; h: number }> = {
   initials: { w: 0.1, h: 0.05 },
   date: { w: 0.18, h: 0.035 },
   text: { w: 0.25, h: 0.035 },
-  checkbox: { w: 0.018, h: 0.014 },
+  checkbox: { w: 0.012, h: 0.0095 },
   choice: { w: 0.12, h: 0.03 },
 };
 
 const EPS = 1e-9;
 // Matches MIN_SIZE in snap.ts; blocks invisible fields.
-const MIN_FIELD = 0.01 - EPS;
+const MIN_FIELD = 0.005 - EPS;
 const round = (n: number) => Math.round(n * 1e6) / 1e6;
 
 export function isValidBox(b: Box): boolean {
@@ -22,8 +22,8 @@ export function isValidBox(b: Box): boolean {
 }
 
 export function clampBox(b: Box): Box {
-  const w = Math.min(Math.max(b.w, 0.01), 1);
-  const h = Math.min(Math.max(b.h, 0.01), 1);
+  const w = Math.min(Math.max(b.w, 0.005), 1);
+  const h = Math.min(Math.max(b.h, 0.005), 1);
   return { x: round(Math.min(Math.max(b.x, 0), 1 - w)), y: round(Math.min(Math.max(b.y, 0), 1 - h)), w: round(w), h: round(h) };
 }
 

@@ -254,7 +254,9 @@ export function FieldEditor(props: {
     if (!f) return;
     const dx = (e.clientX - d.startX) / d.pageW;
     const dy = (e.clientY - d.startY) / d.pageH;
-    const grid = snap && !e.altKey ? GRID_STEP : undefined;
+    // Tick-box sized fields snap to a quarter cell, so they can land exactly on a printed box.
+    const small = d.orig.w < GRID_STEP * 2 || d.orig.h < GRID_STEP * 2;
+    const grid = snap && !e.altKey ? (small ? GRID_STEP / 4 : GRID_STEP) : undefined;
     let box = d.handle === "move" ? moveBox(d.orig, dx, dy, { grid }) : resizeBox(d.orig, d.handle, dx, dy, { grid });
     let g = NO_GUIDES;
     if (d.handle === "move" && !e.altKey) {
@@ -573,11 +575,14 @@ export function FieldEditor(props: {
                         title={f.groupKey ? `Question ${questionNo.get(f.groupKey)}${f.label ? `: ${f.label}` : ""} - ${f.option}` : (f.label ?? undefined)}
                         onPointerDown={(e) => startFieldDrag(e, f, "move")}
                         onFocus={() => setSelected(f.key)}
-                        className={`absolute flex cursor-move touch-none select-none items-center border-ink font-mono ${tiny ? "border px-0" : "border-2 px-1"} text-[10px] font-bold uppercase ${selected === f.key ? "z-10 outline outline-2 outline-offset-2 outline-red" : sel?.groupKey && f.groupKey === sel.groupKey ? "z-10 outline-dashed outline-2 outline-offset-2 outline-red" : ""}`}
+                        className={`group absolute flex cursor-move touch-none select-none items-center border-ink font-mono ${tiny ? "border px-0" : "border-2 px-1"} text-[10px] font-bold uppercase ${selected === f.key ? "z-10 outline outline-2 outline-offset-2 outline-red" : sel?.groupKey && f.groupKey === sel.groupKey ? "z-10 outline-dashed outline-2 outline-offset-2 outline-red" : ""}`}
                         style={{ left: f.x * PAGE_W, top: f.y * h, width: f.w * PAGE_W, height: f.h * h, background: color(f.recipientId) }}
                       >
                         {f.groupKey && (
-                          <span aria-hidden className="pointer-events-none absolute bottom-full left-0 mb-0.5 whitespace-nowrap bg-ink px-0.5 text-[9px] leading-tight text-paper">
+                          <span
+                            aria-hidden
+                            className={`pointer-events-none absolute bottom-full left-0 z-20 mb-0.5 whitespace-nowrap bg-ink px-0.5 text-[9px] leading-tight text-paper ${sel?.groupKey === f.groupKey ? "block" : "hidden group-hover:block"}`}
+                          >
                             Q{questionNo.get(f.groupKey)} {f.option}
                           </span>
                         )}
@@ -586,7 +591,7 @@ export function FieldEditor(props: {
                           (tiny ? TINY_HANDLES : HANDLES).map(({ h: hd, cls }) => (
                             <span
                               key={hd}
-                              aria-hidden
+                            aria-hidden
                               onPointerDown={(e) => startFieldDrag(e, f, hd)}
                               className={`absolute border-ink bg-paper ${tiny ? "h-2 w-2 border" : "h-3 w-3 border-2"} ${cls}`}
                             />
