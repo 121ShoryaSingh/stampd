@@ -12,14 +12,55 @@ async function box(page: Page, name: string) {
   return (await page.getByRole("button", { name }).boundingBox())!;
 }
 
+test("fields drag freely, and the pointer and selection show coordinates in points", async ({ page }) => {
+  await readyEditor(page);
+  const canvas = page.getByTestId("page-1").locator("canvas");
+  await canvas.waitFor();
+  // Bring the page's top just under the header, clear of the wizard's sticky bottom bar.
+  const top = (await canvas.boundingBox())!.y;
+  await page.evaluate((dy) => window.scrollBy(0, dy), top - 120);
+  const c = (await canvas.boundingBox())!;
+  const s = c.width / 612;
+  // Pointer at (100 pt, 200 pt) from the top-left of a Letter page.
+  await page.mouse.move(c.x + 100 * s, c.y + 200 * s);
+  await expect(page.getByTestId("pointer-coords")).toHaveText(/p1\s+(99|100|101), (199|200|201)/);
+
+  await page.getByRole("button", { name: "Signature" }).click();
+  await page.getByRole("button", { name: "Place at center" }).click();
+  const field = page.getByRole("button", { name: "signature field" });
+  const before = (await field.boundingBox())!;
+  // A 7-pixel drag moves the field 7 pixels: no jump to the next grid column.
+  await page.mouse.move(before.x + 20, before.y + 10);
+  await page.mouse.down();
+  await page.mouse.move(before.x + 27, before.y + 10, { steps: 7 });
+  await page.mouse.up();
+  const after = (await field.boundingBox())!;
+  expect(after.x - before.x).toBeCloseTo(7, 0);
+
+  // Typing a position puts the field exactly there.
+  await page.getByLabel("Field X in points").fill("72");
+  await page.getByLabel("Field Y in points").fill("144");
+  await expect(page.getByLabel("Field Y in points")).toHaveValue("144");
+  const placed = (await field.boundingBox())!;
+  const now = (await canvas.boundingBox())!; // the page may have scrolled
+  expect(placed.x - now.x).toBeCloseTo(72 * s, 0);
+  expect(placed.y - now.y).toBeCloseTo(144 * s, 0);
+});
+
 test("drag a field from the palette, snap it, nudge it and delete it", async ({ page }) => {
   await readyEditor(page);
+  // Dragging is free by default; snapping is opt-in.
+  await expect(page.getByLabel("Snap to grid")).not.toBeChecked();
+  await page.getByLabel("Snap to grid").check();
+  // The sidebar scrolls on its own; bring the palette back into view.
+  await page.getByRole("button", { name: "Date" }).scrollIntoViewIfNeeded();
   await page.getByTestId("page-1").scrollIntoViewIfNeeded();
   await page.mouse.wheel(0, 200);
   const target = (await page.getByTestId("page-1").boundingBox())!;
   const src = await box(page, "Date");
   const view = page.viewportSize()!;
-  const dropY = Math.min(target.y + 400, view.height - 60);
+  // Somewhere on the page, clear of the sticky header and the wizard's bottom bar.
+  const dropY = Math.min(Math.max(target.y + 400, 160), view.height - 180);
 
   await page.mouse.move(src.x + src.width / 2, src.y + src.height / 2);
   await page.mouse.down();
@@ -28,10 +69,12 @@ test("drag a field from the palette, snap it, nudge it and delete it", async ({ 
 
   const field = page.getByRole("button", { name: "date field" });
   await expect(field).toBeVisible();
-  const cell = 760 * 0.0125;
+  // At 100% the finest grid cell is half a 1/80-page step (about 5 px).
+  const cell = 760 * 0.00625;
   const before = (await field.boundingBox())!;
-  // Snapped: the left edge sits on a grid line.
-  const offset = (before.x - target.x) / cell;
+  // Snapped: the left edge sits on a grid line (measured from the page itself, inside its border).
+  const inner = (await page.getByTestId("page-1").locator("canvas").boundingBox())!;
+  const offset = (before.x - inner.x) / cell;
   expect(Math.abs(offset - Math.round(offset))).toBeLessThan(0.3);
 
   await field.focus();

@@ -63,11 +63,12 @@ describe("alignToOthers", () => {
 });
 
 describe("gridStepFor", () => {
-  it("halves the grid each time the zoom doubles", () => {
-    expect(gridStepFor(100)).toBe(0.0125);
-    expect(gridStepFor(150)).toBe(0.0125);
-    expect(gridStepFor(200)).toBe(0.00625);
-    expect(gridStepFor(400)).toBe(0.003125);
+  it("keeps cells at most ~6 px on screen, so zooming in adds more cells", () => {
     expect(gridStepFor(50)).toBe(0.0125);
+    expect(gridStepFor(100)).toBe(0.00625);
+    expect(gridStepFor(200)).toBe(0.003125);
+    expect(gridStepFor(400)).toBe(0.0015625);
+    expect(gridStepFor(800)).toBe(0.00078125);
+    for (const z of [75, 100, 125, 150, 200, 300, 400, 600, 800]) expect(gridStepFor(z) * 760 * (z / 100)).toBeLessThanOrEqual(6);
   });
 });

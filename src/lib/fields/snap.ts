@@ -10,9 +10,16 @@ export const MIN_SIZE = 0.005;
 export const GRID_STEP = 0.0125;
 export const GRID_MAJOR_EVERY = 8;
 
-// Finer grid when zoomed in: half the step each time the zoom doubles.
+// On-screen size of the finest grid cell, in CSS pixels at the editor's 760 px base width.
+const FINEST_CELL_PX = 6;
+const BASE_PAGE_PX = 760;
+
+// The finest useful grid at every zoom: GRID_STEP split in halves until a cell is at most ~6 px on screen,
+// so zooming in always adds more, smaller cells (and fields snap to them). Halving keeps every line on the
+// bolder 100% lines.
 export function gridStepFor(zoom: number): number {
-  return GRID_STEP / 2 ** Math.max(0, Math.floor(Math.log2(zoom / 100)));
+  const cellPx = (GRID_STEP * BASE_PAGE_PX * zoom) / 100;
+  return GRID_STEP / 2 ** Math.max(0, Math.ceil(Math.log2(cellPx / FINEST_CELL_PX)));
 }
 
 const r6 = (n: number) => Math.round(n * 1e6) / 1e6;

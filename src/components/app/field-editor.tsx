@@ -59,7 +59,7 @@ const HANDLES: { h: Handle; cls: string }[] = [
 // Light enough for black text; distinct for up to eight people.
 const COLORS = ["#FFE600", "#FF8AD8", "#00D26A", "#7FA8FF", "#FF9A6B", "#B99CFF", "#6FE3E3", "#C8F560"];
 const BASE_W = 760;
-const ZOOMS = [75, 100, 125, 150, 200, 300, 400];
+const ZOOMS = [75, 100, 125, 150, 200, 300, 400, 600, 800];
 const ALIGN_PX = 5;
 // Up to this many people, "Assign to" is a list of color buttons; above it, a dropdown.
 const PICKER_MAX = 6;
@@ -97,9 +97,14 @@ export function FieldEditor(props: {
   const assignee = signers.some((s) => s.id === picked) ? picked : (signers[0]?.id ?? "");
   const [selected, setSelected] = useState<string | null>(null);
   const [showGrid, setShowGrid] = useState(true);
-  const [snap, setSnap] = useState(true);
+  // Free placement by default: a field lands exactly where it is dropped. Snapping is opt-in.
+  const [snap, setSnap] = useState(false);
   const [guides, setGuides] = useState<{ page: number; g: Guides }>({ page: 0, g: NO_GUIDES });
   const [ghost, setGhost] = useState<PaletteDrag | null>(null);
+  // Pointer position over a page (fractions of it), for the coordinates readout.
+  const [cursor, setCursor] = useState<{ page: number; x: number; y: number } | null>(null);
+  const sizeOf = (page: number) => props.pageSizes[page - 1] ?? { w: 612, h: 792 };
+  const pt = (frac: number, full: number) => (frac * full).toFixed(zoom >= 200 ? 1 : 0);
   const [msg, setMsg] = useState<{ ok?: string; error?: string }>({});
   const drag = useRef<FieldDrag | PaletteDrag | null>(null);
   // Set after a palette drag, so the click that follows the drop does not toggle the tool.
@@ -129,7 +134,7 @@ export function FieldEditor(props: {
   // A copy of a question gets a new key and moves down one row, ready for the next line of a form.
   function duplicate(f: EditorField) {
     if (!f.groupKey) {
-      const copy = { ...f, ...moveBox(f, GRID_STEP, GRID_STEP), key: crypto.randomUUID() };
+      const copy = { ...f, ...moveBox(f, BASE_GRID_STEP, BASE_GRID_STEP), key: crypto.randomUUID() };
       setFields((fs) => [...fs, copy]);
       return setSelected(copy.key);
     }
@@ -166,6 +171,42 @@ export function FieldEditor(props: {
   }, [props.pdfUrl]);
 
   const leaveDialog = useLeaveGuard(dirty, "field changes");
+
+  // Ctrl/Cmd + scroll, trackpad pinch and Ctrl/Cmd + =/-/0 zoom the document (and its grid) instead of the whole browser page.
+  const pagesRef = useRef<HTMLDivElement>(null);
+  const hasSigners = signers.length > 0;
+  useEffect(() => {
+    const step = (dir: 1 | -1) =>
+      setZoom((z) => {
+        const i = ZOOMS.indexOf(z);
+        return ZOOMS[Math.min(Math.max((i < 0 ? ZOOMS.indexOf(100) : i) + dir, 0), ZOOMS.length - 1)];
+      });
+    let last = 0;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      // A pinch fires many small events; one zoom step per 120 ms keeps it controllable.
+      if (e.timeStamp - last < 120 || e.deltaY === 0) return;
+      last = e.timeStamp;
+      step(e.deltaY < 0 ? 1 : -1);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      if (e.key === "=" || e.key === "+") step(1);
+      else if (e.key === "-") step(-1);
+      else if (e.key === "0") setZoom(100);
+      else return;
+      e.preventDefault();
+    };
+    const el = pagesRef.current;
+    el?.addEventListener("wheel", onWheel, { passive: false });
+    window.addEventListener("keydown", onKey);
+    return () => {
+      el?.removeEventListener("wheel", onWheel);
+      window.removeEventListener("keydown", onKey);
+    };
+    // The pages only render once there is a signer.
+  }, [hasSigners]);
 
   // Keyboard: nudge, duplicate, delete, deselect.
   useEffect(() => {
@@ -254,12 +295,12 @@ export function FieldEditor(props: {
     if (!f) return;
     const dx = (e.clientX - d.startX) / d.pageW;
     const dy = (e.clientY - d.startY) / d.pageH;
-    // Tick-box sized fields snap to a quarter cell, so they can land exactly on a printed box.
-    const small = d.orig.w < GRID_STEP * 2 || d.orig.h < GRID_STEP * 2;
-    const grid = snap && !e.altKey ? (small ? GRID_STEP / 4 : GRID_STEP) : undefined;
+    // The grid is at most ~6 px per cell at every zoom, fine enough to land on a printed tick box.
+    const grid = snap && !e.altKey ? GRID_STEP : undefined;
     let box = d.handle === "move" ? moveBox(d.orig, dx, dy, { grid }) : resizeBox(d.orig, d.handle, dx, dy, { grid });
     let g = NO_GUIDES;
-    if (d.handle === "move" && !e.altKey) {
+    // Lining up with other fields is part of snapping; with snapping off, dragging is completely free.
+    if (d.handle === "move" && snap && !e.altKey) {
       const others = fields.filter((x) => x.page === f.page && x.key !== f.key);
       const a = alignToOthers(box, others, ALIGN_PX / d.pageW);
       box = moveBox(a.box, 0, 0);
@@ -324,7 +365,8 @@ export function FieldEditor(props: {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-[15rem_1fr] gap-6" onPointerMove={onMove} onPointerUp={onUp}>
-        <aside className="sticky top-4 h-fit min-w-0 space-y-4">
+        {/* Scrolls on its own so the palette stays on screen; in the wizard it stops above the sticky Back / Continue bar. */}
+        <aside className={`sticky top-4 min-w-0 space-y-4 overflow-y-auto overscroll-contain pb-2 pr-2 ${props.wizard ? "max-h-[calc(100vh-9rem)]" : "max-h-[calc(100vh-2rem)]"}`}>
           {signers.length <= PICKER_MAX ? (
             // A few people: pick by clicking their color, which doubles as the legend.
             <div>
@@ -403,7 +445,7 @@ export function FieldEditor(props: {
               Place at center
             </Button>
           )}
-          <p className="font-mono text-xs">Drag a field onto the page, or pick one and click. Arrows nudge, Shift+arrows move 4 cells, Alt for fine moves, Ctrl+D duplicates, Delete removes. A choice question has one box per answer: drag each onto the document&apos;s own box or word.</p>
+          <p className="font-mono text-xs">Drag a field onto the page, or pick one and click. Fields go exactly where you drop them; tick Snap to grid to line them up. Arrows nudge, Shift+arrows move 4 cells, Alt for fine moves, Ctrl+D duplicates, Delete removes. A choice question has one box per answer: drag each onto the document&apos;s own box or word.</p>
           <div className="border-brutal space-y-1 p-2 font-mono text-xs font-bold uppercase">
             <label className="flex items-center gap-2">
               <input type="checkbox" checked={showGrid} onChange={(e) => setShowGrid(e.target.checked)} /> Show grid
@@ -422,11 +464,46 @@ export function FieldEditor(props: {
               </select>
             </label>
           </div>
+          {/* Like the status bar in MS Paint: where the pointer is on the page, in PDF points from the top-left corner. */}
+          <div className="border-brutal bg-paper p-2 font-mono text-xs" aria-label="Coordinates">
+            <p>
+              <span className="font-bold">Pointer</span>{" "}
+              <span data-testid="pointer-coords">{cursor ? `p${cursor.page}  ${pt(cursor.x, sizeOf(cursor.page).w)}, ${pt(cursor.y, sizeOf(cursor.page).h)}` : "-"}</span>
+            </p>
+            <p>
+              <span className="font-bold">Selection</span>{" "}
+              {sel ? `${pt(sel.x, sizeOf(sel.page).w)}, ${pt(sel.y, sizeOf(sel.page).h)}  ${pt(sel.w, sizeOf(sel.page).w)} x ${pt(sel.h, sizeOf(sel.page).h)}` : "-"}
+            </p>
+            <p className="opacity-70">in points (1/72 inch) from the top-left</p>
+          </div>
           {sel && (
             <div className="border-brutal space-y-2 bg-yellow/40 p-2" aria-label="Selected field">
               <p className="font-mono text-xs font-bold uppercase">
                 {sel.groupKey ? `Question ${questionNo.get(sel.groupKey)} (${siblings(sel).length} answers)` : sel.type} - page {sel.page}
               </p>
+              {/* Exact position and size, typed in points. */}
+              <div className="grid grid-cols-4 gap-1">
+                {(["x", "y", "w", "h"] as const).map((k) => {
+                  const full = k === "x" || k === "w" ? sizeOf(sel.page).w : sizeOf(sel.page).h;
+                  return (
+                    <label key={k} className="block min-w-0">
+                      <span className="block font-mono text-[10px] font-bold uppercase">{k === "w" ? "Width" : k === "h" ? "Height" : k.toUpperCase()}</span>
+                      <input
+                        type="number"
+                        step={0.5}
+                        aria-label={`Field ${k === "w" ? "width" : k === "h" ? "height" : k.toUpperCase()} in points`}
+                        value={Number((sel[k] * full).toFixed(1))}
+                        onChange={(e) => {
+                          const v = Number(e.target.value);
+                          if (!Number.isFinite(v)) return;
+                          update(sel.key, clampBox({ x: sel.x, y: sel.y, w: sel.w, h: sel.h, [k]: v / full }));
+                        }}
+                        className="border-brutal w-full min-w-0 bg-paper px-1 py-0.5 font-mono text-xs"
+                      />
+                    </label>
+                  );
+                })}
+              </div>
               <select
                 aria-label="Field signer"
                 value={sel.recipientId}
@@ -515,7 +592,7 @@ export function FieldEditor(props: {
           {!props.wizard && status}
         </aside>
 
-        <div className="min-w-0 space-y-6 overflow-x-auto">
+        <div ref={pagesRef} className="min-w-0 space-y-6 overflow-x-auto">
           {!doc && <p className="font-mono">Loading PDF...</p>}
           {doc &&
             props.pageSizes.map((ps, i) => {
@@ -528,6 +605,12 @@ export function FieldEditor(props: {
                   data-page={page}
                   data-testid={`page-${page}`}
                   onClick={(e) => place(e, page)}
+                  onPointerMove={(e) => {
+                    const r = e.currentTarget.getBoundingClientRect();
+                    const inner = e.currentTarget.clientLeft;
+                    setCursor({ page, x: (e.clientX - r.left - inner) / PAGE_W, y: (e.clientY - r.top - inner) / h });
+                  }}
+                  onPointerLeave={() => setCursor(null)}
                   className={`border-brutal shadow-hard relative bg-paper ${tool ? "cursor-crosshair" : ""}`}
                   style={{ width: PAGE_W, height: h }}
                 >
@@ -536,14 +619,14 @@ export function FieldEditor(props: {
                     <div
                       className="pointer-events-none absolute inset-0"
                       style={{
-                        // Cells are fixed fractions of the page, so they grow as you zoom in, just like the document.
-                        // Zoomed in, fainter snap lines split each cell for finer placement.
+                        // The finest cells (~6 px at any zoom, what fields snap to) are light; bolder lines mark
+                        // the 100% cells and every 8th cell so the page stays readable. Zooming in adds cells.
                         backgroundImage: [
-                          "linear-gradient(to right, rgba(0,0,0,.28) 1px, transparent 1px)",
-                          "linear-gradient(to bottom, rgba(0,0,0,.28) 1px, transparent 1px)",
-                          "linear-gradient(to right, rgba(0,0,0,.14) 1px, transparent 1px)",
-                          "linear-gradient(to bottom, rgba(0,0,0,.14) 1px, transparent 1px)",
-                          ...(GRID_STEP < BASE_GRID_STEP ? ["linear-gradient(to right, rgba(0,0,0,.06) 1px, transparent 1px)", "linear-gradient(to bottom, rgba(0,0,0,.06) 1px, transparent 1px)"] : []),
+                          "linear-gradient(to right, rgba(0,0,0,.3) 1px, transparent 1px)",
+                          "linear-gradient(to bottom, rgba(0,0,0,.3) 1px, transparent 1px)",
+                          "linear-gradient(to right, rgba(0,0,0,.16) 1px, transparent 1px)",
+                          "linear-gradient(to bottom, rgba(0,0,0,.16) 1px, transparent 1px)",
+                          ...(GRID_STEP < BASE_GRID_STEP ? ["linear-gradient(to right, rgba(0,0,0,.08) 1px, transparent 1px)", "linear-gradient(to bottom, rgba(0,0,0,.08) 1px, transparent 1px)"] : []),
                         ].join(","),
                         backgroundSize: [
                           `${PAGE_W * majorStep}px ${h * majorStep}px`,
