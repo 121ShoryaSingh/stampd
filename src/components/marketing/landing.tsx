@@ -175,7 +175,6 @@ export function Landing({ signedIn }: { signedIn: boolean }) {
       );
       gsap.from(".pad", { rotateY: 25, rotate: 4, x: 120, autoAlpha: 0, duration: 1.1, ease, scrollTrigger: { trigger: ".pad", start: "top 80%" } });
       q(".rev").forEach((r, i) => gsap.from(r, { x: [-300, 0, 300][i], y: [0, 200, 0][i], autoAlpha: 0, duration: 1, ease: snap, scrollTrigger: { trigger: ".rgrid", start: "top 80%" } }));
-      gsap.from(".ratings > div", { scale: 0, stagger: 0.08, duration: 0.5, ease: snap, scrollTrigger: { trigger: ".ratings", start: "top 90%" } });
       gsap.from(".plan", { y: 120, autoAlpha: 0, stagger: { each: 0.12, from: "edges" }, duration: 0.9, ease: snap, scrollTrigger: { trigger: ".pgrid", start: "top 80%" } });
       q(".toggle button").forEach((b) => on(b, "click", () => gsap.fromTo(".pp", { rotateX: 90, y: -10 }, { rotateX: 0, y: 0, duration: 0.5, ease: snap })));
       gsap.from(".faq details", { x: -60, autoAlpha: 0, stagger: 0.08, duration: 0.7, ease, scrollTrigger: { trigger: ".faq", start: "top 80%" } });
