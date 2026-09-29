@@ -21,7 +21,7 @@ async function roleOf(tx: Tx, tenantId: string, userId: string): Promise<Role | 
   return m?.role ?? null;
 }
 
-async function assertAdmin(tx: Tx, tenantId: string, userId: string) {
+export async function assertAdmin(tx: Tx, tenantId: string, userId: string) {
   if ((await roleOf(tx, tenantId, userId)) !== "admin") throw new ForbiddenError("Only admins can do that");
 }
 

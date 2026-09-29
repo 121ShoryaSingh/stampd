@@ -47,26 +47,32 @@ export async function createUploadUrl(i: { tenantId: string; envelopeId: string 
   return { url: await presignUpload(key, "application/pdf"), key };
 }
 
-export async function finalizeUpload(i: { tenantId: string; userId: string; envelopeId: string; key: string; filename: string }) {
-  if (!isUploadKeyFor(i.key, i.tenantId, i.envelopeId)) throw new ValidationError("This upload does not belong to this envelope");
-  const size = await objectSize(i.key);
+// Checks an uploaded PDF (size, structure) and deletes the upload if it is rejected.
+export async function readUploadedPdf(key: string, rawFilename: string) {
+  const size = await objectSize(key);
   if (size === null) throw new ValidationError("The upload did not finish. Please try again.");
   // A signed PUT cannot enforce limits, so check size before downloading and clean up on rejection.
   if (size > MAX_UPLOAD_BYTES) {
-    await deleteObject(i.key);
+    await deleteObject(key);
     throw new ValidationError("PDFs can be at most 25 MB");
   }
-  const bytes = await getObjectBytes(i.key);
+  const bytes = await getObjectBytes(key);
   let info: { pageCount: number; pageSizes: PageSize[] };
   try {
     if (bytes.byteLength > MAX_UPLOAD_BYTES) throw new ValidationError("PDFs can be at most 25 MB");
     info = await inspectPdf(bytes);
   } catch (e) {
-    await deleteObject(i.key);
+    await deleteObject(key);
     throw e;
   }
   const sha256 = createHash("sha256").update(bytes).digest("hex");
-  const filename = i.filename.replace(/[^\w.\- ()]/g, "_").slice(0, 120) || "document.pdf";
+  const filename = rawFilename.replace(/[^\w.\- ()]/g, "_").slice(0, 120) || "document.pdf";
+  return { bytes, info, sha256, filename };
+}
+
+export async function finalizeUpload(i: { tenantId: string; userId: string; envelopeId: string; key: string; filename: string }) {
+  if (!isUploadKeyFor(i.key, i.tenantId, i.envelopeId)) throw new ValidationError("This upload does not belong to this envelope");
+  const { bytes, info, sha256, filename } = await readUploadedPdf(i.key, i.filename);
   // Store the exact verified bytes where no signed upload URL can reach, then drop the upload.
   const docKey = documentKeyFor(i.tenantId, i.envelopeId);
   await putObject(docKey, bytes, "application/pdf");

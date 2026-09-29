@@ -7,7 +7,14 @@ import { isValidBox } from "@/lib/fields/geometry";
 import { lockDraft } from "./service";
 
 export const MAX_FIELDS = 500;
-const TYPES: FieldType[] = ["signature", "initials", "date", "text", "checkbox", "choice"];
+export const FIELD_TYPES: FieldType[] = ["signature", "initials", "date", "text", "checkbox", "choice"];
+
+// Shared placement rules for envelope and preset fields.
+export function checkFieldPlacement(f: { type: FieldType; page: number; x: number; y: number; w: number; h: number }, pageCount: number) {
+  if (!FIELD_TYPES.includes(f.type)) throw new ValidationError(`Unknown field type ${f.type}`);
+  if (!Number.isInteger(f.page) || f.page < 1 || f.page > pageCount) throw new ValidationError(`The document has no page ${f.page}`);
+  if (!isValidBox(f)) throw new ValidationError("A field is outside the page");
+}
 export type FieldInput = { recipientId: string; type: FieldType; page: number; x: number; y: number; w: number; h: number; required?: boolean };
 
 export async function saveFields(i: { tenantId: string; userId: string; envelopeId: string; fields: FieldInput[] }) {
@@ -18,12 +25,10 @@ export async function saveFields(i: { tenantId: string; userId: string; envelope
     if (!doc) throw new ValidationError("Upload a PDF before placing fields");
     const recs = new Map((await tx.recipient.findMany({ where: { envelopeId: i.envelopeId } })).map((r) => [r.id, r]));
     const rows = i.fields.map((f) => {
-      if (!TYPES.includes(f.type)) throw new ValidationError(`Unknown field type ${f.type}`);
+      checkFieldPlacement(f, doc.pageCount);
       const rec = recs.get(f.recipientId);
       if (!rec) throw new ValidationError("A field is assigned to a recipient who is not on this envelope");
       if (rec.role === "cc") throw new ValidationError(`${rec.email} is cc only and cannot have fields`);
-      if (!Number.isInteger(f.page) || f.page < 1 || f.page > doc.pageCount) throw new ValidationError(`The document has no page ${f.page}`);
-      if (!isValidBox(f)) throw new ValidationError("A field is outside the page");
       return {
         tenantId: i.tenantId,
         envelopeId: i.envelopeId,
