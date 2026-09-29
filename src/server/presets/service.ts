@@ -78,11 +78,12 @@ export async function finalizePresetUpload(i: Actor & { key: string; filename: s
   await deleteObject(i.key);
   const oldKey = await withTenant(i.tenantId, async (tx) => {
     const old = await adminLock(tx, i);
-    // Fields on pages the new PDF lacks are dropped; that changes the preset.
-    const dropped = await tx.presetField.deleteMany({ where: { presetId: i.presetId, page: { gt: info.pageCount } } });
+    // Fields on pages the new PDF lacks are dropped.
+    await tx.presetField.deleteMany({ where: { presetId: i.presetId, page: { gt: info.pageCount } } });
+    // A new PDF is a new version, so audits of drafts made from it stay exact.
     await tx.preset.update({
       where: { id: i.presetId },
-      data: { filename, s3Key: docKey, sha256, pageCount: info.pageCount, pageSizes: info.pageSizes, sizeBytes: bytes.byteLength, ...(dropped.count ? { version: { increment: 1 } } : {}) },
+      data: { filename, s3Key: docKey, sha256, pageCount: info.pageCount, pageSizes: info.pageSizes, sizeBytes: bytes.byteLength, ...(old.s3Key ? { version: { increment: 1 } } : {}) },
     });
     return old.s3Key;
   }).catch(async (e) => {

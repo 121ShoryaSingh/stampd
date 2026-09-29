@@ -3,10 +3,10 @@ import AxeBuilder from "@axe-core/playwright";
 import { fillSignup, newUser, settle, signUpWithWorkspace } from "./helpers";
 import { signingLink, waitForMail } from "./mail";
 
-async function uploadPdf(page: Page) {
+async function uploadPdf(page: Page, pages = 1) {
   const { PDFDocument } = await import("pdf-lib");
   const doc = await PDFDocument.create();
-  doc.addPage([612, 792]).drawText("Agreement", { x: 50, y: 700 });
+  for (let i = 0; i < pages; i++) doc.addPage([612, 792]).drawText(`Agreement page ${i + 1}`, { x: 50, y: 700 });
   await page.getByTestId("pdf-input").setInputFiles({ name: "agreement.pdf", mimeType: "application/pdf", buffer: Buffer.from(await doc.save()) });
 }
 
@@ -162,4 +162,27 @@ test("members can use presets but not manage them", async ({ browser }) => {
   await matePage.getByRole("button", { name: "Create draft" }).click();
   await expect(matePage.getByRole("heading", { name: "Team NDA" })).toBeVisible();
   await expect(matePage.getByRole("button", { name: "Save as preset" })).toHaveCount(0);
+});
+
+test("a shorter PDF drops fields on missing pages and saving still works", async ({ page }) => {
+  await signUpWithWorkspace(page, newUser("pager"));
+  await page.goto("/presets/new");
+  await page.getByLabel("Name").fill("Two pager");
+  await page.getByRole("button", { name: "Create preset" }).click();
+  await uploadPdf(page, 2);
+  await expect(page.getByText(/agreement\.pdf - 2 pages/)).toBeVisible();
+  await page.getByLabel("Role 1 name").fill("Signer");
+  await page.getByRole("button", { name: "Save roles" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Roles saved" })).toBeVisible();
+  await page.getByRole("button", { name: "Signature" }).click();
+  await page.getByTestId("page-1").locator("canvas").click({ position: { x: 200, y: 150 } });
+  await page.getByTestId("page-2").locator("canvas").click({ position: { x: 200, y: 150 } });
+  await page.getByRole("button", { name: "Save fields" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Saved 2 fields" })).toBeVisible();
+
+  await uploadPdf(page, 1);
+  await expect(page.getByText(/agreement\.pdf - 1 page$/)).toBeVisible();
+  await expect(page.getByTestId("page-2")).toHaveCount(0);
+  await page.getByRole("button", { name: "Save fields" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Saved 1 fields" })).toBeVisible();
 });

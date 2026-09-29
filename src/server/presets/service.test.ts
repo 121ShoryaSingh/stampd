@@ -140,6 +140,15 @@ describe("presets: create and manage", () => {
     expect(got.preset.version).toBe(old.version + 1);
   });
 
+  it("replacing the PDF always bumps the version", async () => {
+    const p = await fullPreset();
+    const v = (await getPreset(p.tenantId, p.presetId)).preset.version;
+    await upload(p.tenantId, p.adminId, p.presetId, 2);
+    const got = await getPreset(p.tenantId, p.presetId);
+    expect(got.fields).toHaveLength(2);
+    expect(got.preset.version).toBe(v + 1);
+  });
+
   it("duplicates into an independent preset", async () => {
     const p = await fullPreset();
     await admin.preset.update({ where: { id: p.presetId }, data: { usageCount: 7 } });

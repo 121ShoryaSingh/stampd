@@ -85,7 +85,9 @@ export default async function PresetPage({ params }: { params: Promise<{ id: str
       <Card>
         <h2 className="mb-4 font-display text-2xl">4. Place fields</h2>
         {pdfUrl ? (
+          // A new PDF remounts the editor with the fields the server kept.
           <FieldEditor
+            key={preset.s3Key}
             save={savePresetFieldsAction.bind(null, id)}
             pdfUrl={pdfUrl}
             pageSizes={preset.pageSizes}

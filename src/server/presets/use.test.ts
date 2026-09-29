@@ -2,7 +2,7 @@ import { describe, it, expect, afterAll } from "vitest";
 import { adminDb, insertUser } from "../../../tests/helpers/db";
 import { makePdf } from "../../../tests/helpers/pdf";
 import { createTenant } from "@/server/tenants/service";
-import { getObjectBytes, objectExists, putObject } from "@/server/storage/storage";
+import { deleteObject, getObjectBytes, objectExists, putObject } from "@/server/storage/storage";
 import { createEnvelope, deleteDraft, finalizeUpload, getEnvelope, uploadKeyFor } from "@/server/envelopes/service";
 import { setRecipients } from "@/server/envelopes/recipients";
 import { saveFields } from "@/server/envelopes/fields";
@@ -87,6 +87,12 @@ describe("save as preset", () => {
     expect(p.fields).toHaveLength(3);
   });
 
+  it("only saves drafts", async () => {
+    const d = await draft();
+    await admin.envelope.update({ where: { id: d.envelopeId }, data: { status: "sent" } });
+    await expect(savePresetFromEnvelope({ ...d, name: "Sent one" })).rejects.toThrow(/draft/);
+  });
+
   it("needs an admin, a PDF and recipients", async () => {
     const d = await draft();
     await expect(savePresetFromEnvelope({ ...d, userId: d.memberId, name: "Mine" })).rejects.toThrow(/admins/);
@@ -138,6 +144,15 @@ describe("use a preset", () => {
     await expect(createEnvelopeFromPreset({ ...base, people: people(withWitness) })).rejects.toThrow(/Witness has no fields/);
     await archivePreset({ tenantId: d.tenantId, userId: d.userId, presetId: id });
     await expect(createEnvelopeFromPreset({ ...base, people: people(withWitness) })).rejects.toThrow(/archived/);
+  });
+
+  it("says the preset changed when its PDF vanished mid-use", async () => {
+    const d = await draft();
+    const { id } = await savePresetFromEnvelope({ ...d, name: "Lease" });
+    const { preset, roles } = await getPreset(d.tenantId, id);
+    // Same state as a concurrent PDF replace deleting the old copy.
+    await deleteObject(preset.s3Key!);
+    await expect(createEnvelopeFromPreset({ tenantId: d.tenantId, userId: d.userId, presetId: id, title: "X", people: people(roles) })).rejects.toThrow(/just changed/);
   });
 
   it("refuses a preset without a PDF and another workspace's preset", async () => {

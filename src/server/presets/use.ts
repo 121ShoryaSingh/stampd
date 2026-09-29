@@ -20,6 +20,7 @@ export async function savePresetFromEnvelope(i: { tenantId: string; userId: stri
     await assertAdmin(tx, i.tenantId, i.userId);
     const e = await tx.envelope.findUnique({ where: { id: i.envelopeId }, include: { document: true, recipients: true, fields: true } });
     if (!e) throw new NotFoundError("Envelope not found");
+    if (e.status !== "draft") throw new InvalidStateError("Only drafts can be saved as presets");
     return e;
   });
   if (!env.document) throw new ValidationError("Upload a PDF before saving a preset");
@@ -96,8 +97,16 @@ export async function createEnvelopeFromPreset(i: { tenantId: string; userId: st
 
   const envelopeId = uuidv7();
   const docKey = documentKeyFor(i.tenantId, envelopeId);
-  await putObject(docKey, await getObjectBytes(preset.s3Key), "application/pdf");
+  // A concurrent PDF replace may delete the copy we read; ask to retry.
+  const changed = () => new InvalidStateError("This preset just changed. Please try again.");
+  const bytes = await getObjectBytes(preset.s3Key).catch(() => {
+    throw changed();
+  });
+  await putObject(docKey, bytes, "application/pdf");
   return withTenant(i.tenantId, async (tx) => {
+    // Lock and re-check, so the draft and its audit match one preset version.
+    const now = await lockPreset(tx, preset.id);
+    if (now.s3Key !== preset.s3Key || now.version !== preset.version || now.status !== "active") throw changed();
     await tx.envelope.create({ data: { id: envelopeId, tenantId: i.tenantId, createdBy: i.userId, title, message: preset.message } });
     const doc = await tx.document.create({
       data: {
