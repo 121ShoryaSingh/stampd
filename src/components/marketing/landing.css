@@ -74,9 +74,10 @@
   @keyframes draw { 0% { stroke-dashoffset: 520; } 50%, 88% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: 0; opacity: 0; } }
   .lp .doc .meta { display: flex; justify-content: space-between; margin-top: 14px; font-family: var(--font-jetbrains-mono); font-size: 11px; }
   .lp .stamp { position: absolute; right: 0; bottom: 36px; width: 128px; height: 128px; border-radius: 50%; background: var(--green); border: var(--b); box-shadow: var(--sh-sm);
-           display: grid; place-items: center; animation: spin 14s linear infinite; }
-  .lp .stamp svg { width: 118px; height: 118px; }
-  .lp .stamp .c { position: absolute; font-family: var(--font-archivo-black); font-size: 28px; animation: spin 14s linear infinite reverse; }
+           display: grid; place-items: center; }
+  /* Only the text ring turns; the OK in the middle stays upright. */
+  .lp .stamp svg { width: 118px; height: 118px; animation: spin 14s linear infinite; }
+  .lp .stamp .c { position: absolute; font-family: var(--font-archivo-black); font-size: 28px; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .lp .sticker { position: absolute; top: -6px; right: 10px; background: var(--blue); color: #fff; border: var(--b); padding: 8px 12px; font-weight: 700; font-size: 13px; transform: rotate(8deg); box-shadow: var(--sh-sm); animation: wobble 3s ease-in-out infinite; }
   @keyframes wobble { 0%,100% { transform: rotate(8deg); } 50% { transform: rotate(3deg) scale(1.04); } }
@@ -229,7 +230,7 @@
   
   .lp.gsap .rv { opacity: 1; transform: none; transition: none; }
   .lp.gsap .hero h1 .strike::after { animation: none; display: none; }
-  .lp.gsap .doc.front, .lp.gsap .stamp, .lp.gsap .sticker { animation: none; }
+  .lp.gsap .doc.front, .lp.gsap .stamp svg, .lp.gsap .sticker { animation: none; }
   .lp.gsap .step:hover, .lp.gsap .rev:hover { transform: none; }
   .lp .split-line { overflow: hidden; }
   /* custom cursor */

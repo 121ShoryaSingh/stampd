@@ -137,11 +137,11 @@ export function Landing({ signedIn }: { signedIn: boolean }) {
         .from(".doc.back", { y: -400, rotate: 30, duration: 1, ease: "bounce.out" }, 0.5)
         .from(".doc.front", { y: -500, rotate: -25, duration: 1.1, ease: "bounce.out" }, 0.7)
         .from(".sticker", { scale: 0, rotate: 90, duration: 0.6, ease: snap }, 1.6)
-        .from(".stamp", { scale: 3, autoAlpha: 0, rotate: -90, duration: 0.5, ease: "power4.in" }, 1.8)
+        .from(".stamp", { scale: 3, autoAlpha: 0, duration: 0.5, ease: "power4.in" }, 1.8)
         .to(".docstack", { x: 6, yoyo: true, repeat: 3, duration: 0.04 }, 2.3)
         .add(() => {
           gsap.to(".doc.front", { y: -8, rotate: -1, duration: 2.5, yoyo: true, repeat: -1, ease: "sine.inOut" });
-          gsap.to(".stamp", { rotate: "+=360", duration: 14, repeat: -1, ease: "none" });
+          gsap.to(".stamp svg", { rotate: "+=360", duration: 14, repeat: -1, ease: "none" });
           gsap.to(".sticker", { rotate: 3, scale: 1.04, duration: 1.5, yoyo: true, repeat: -1, ease: "sine.inOut" });
         });
 
