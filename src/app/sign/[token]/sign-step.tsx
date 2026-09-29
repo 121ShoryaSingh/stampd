@@ -160,12 +160,13 @@ export function SignStep({ token, view }: { token: string; view: View }) {
                           refs.current[f.id] = el;
                         }}
                         onClick={() => choose(f)}
-                        className={`absolute flex items-center justify-center overflow-hidden border-2 border-ink font-mono text-[10px] font-bold uppercase ${
+                        className={`absolute flex items-center justify-center border-2 border-ink font-mono text-[10px] font-bold uppercase before:absolute before:-inset-2 before:content-[''] ${
                           chosen ? "bg-green/40" : ok ? "bg-paper/40" : "bg-yellow/80 animate-pulse"
                         } ${chosen && f.mark === "circle" ? "rounded-full" : ""}`}
                         style={style}
                       >
-                        {chosen ? (f.mark === "text" ? f.option : f.mark === "cross" ? "X" : f.mark === "circle" ? "" : "\u2713") : ""}
+                        {/* Answer boxes can be tick-box small; the ::before above widens the tap area around them. */}
+                        <span className="overflow-hidden whitespace-nowrap">{chosen ? (f.mark === "text" ? f.option : f.mark === "cross" ? "X" : f.mark === "circle" ? "" : "\u2713") : ""}</span>
                       </button>
                     );
                   }

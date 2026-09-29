@@ -7,7 +7,7 @@ export const DEFAULT_FIELD_SIZE: Record<FieldKind, { w: number; h: number }> = {
   initials: { w: 0.1, h: 0.05 },
   date: { w: 0.18, h: 0.035 },
   text: { w: 0.25, h: 0.035 },
-  checkbox: { w: 0.03, h: 0.023 },
+  checkbox: { w: 0.018, h: 0.014 },
   choice: { w: 0.12, h: 0.03 },
 };
 

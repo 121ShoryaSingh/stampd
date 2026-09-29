@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowRight, FilePlus2, Plus, Search } from "lucide-react";
+import { ButtonLink } from "@/components/ui/button-link";
 import { requireTenant } from "@/server/tenants/current";
 import { countByStatus, listEnvelopes } from "@/server/envelopes/service";
 import type { EnvelopeStatus } from "@/server/db/types";
@@ -118,9 +119,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                   </TD>
                   <TD className="hidden font-mono text-sm sm:table-cell">{fmt(e.sentAt)}</TD>
                   <TD className="text-right">
-                    <Link href={`/envelopes/${e.id}`} aria-label={`Open ${e.title}`} className="inline-flex p-1 hover:bg-yellow">
-                      <ArrowRight aria-hidden className="h-4 w-4" />
-                    </Link>
+                    <ButtonLink href={`/envelopes/${e.id}`} aria-label={`Open ${e.title}`} variant={e.status === "draft" ? "accent" : "default"} className="whitespace-nowrap">
+                      {e.status === "draft" ? "Continue" : "Open"} <ArrowRight aria-hidden className="h-5 w-5" />
+                    </ButtonLink>
                   </TD>
                 </TRow>
               );

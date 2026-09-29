@@ -39,6 +39,13 @@ const KINDS: { type: FieldKind; label: string; Icon: typeof PenLine }[] = [
   { type: "checkbox", label: "Checkbox", Icon: CheckSquare },
   { type: "choice", label: "Choice (Yes / No)", Icon: CircleDot },
 ];
+// Small boxes: corners just outside the box, leaving its inside free to grab and move.
+const TINY_HANDLES: { h: Handle; cls: string }[] = [
+  { h: "nw", cls: "-left-2 -top-2 cursor-nwse-resize" },
+  { h: "ne", cls: "-right-2 -top-2 cursor-nesw-resize" },
+  { h: "se", cls: "-bottom-2 -right-2 cursor-nwse-resize" },
+  { h: "sw", cls: "-bottom-2 -left-2 cursor-nesw-resize" },
+];
 const HANDLES: { h: Handle; cls: string }[] = [
   { h: "nw", cls: "-left-1.5 -top-1.5 cursor-nwse-resize" },
   { h: "n", cls: "left-1/2 -top-1.5 -translate-x-1/2 cursor-ns-resize" },
@@ -201,7 +208,8 @@ export function FieldEditor(props: {
   // A new question: a Yes box and a No box side by side, to drag onto the document's own boxes or words.
   function addQuestion(page: number, cx: number, cy: number) {
     const groupKey = crypto.randomUUID();
-    const gap = 0.03;
+    // Wide enough apart that the "Q1 Yes" / "Q1 No" tags above the boxes do not overlap.
+    const gap = 0.07;
     const boxes = DEFAULT_OPTIONS.map((option, i) => {
       let box = clampBox({ x: cx - OPTION_SIZE.w - gap / 2 + i * (OPTION_SIZE.w + gap), y: cy - OPTION_SIZE.h / 2, ...OPTION_SIZE });
       if (snap) box = moveBox(box, 0, 0, { grid: GRID_STEP });
@@ -314,27 +322,33 @@ export function FieldEditor(props: {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-[15rem_1fr] gap-6" onPointerMove={onMove} onPointerUp={onUp}>
-        <aside className="sticky top-4 h-fit space-y-4">
+        <aside className="sticky top-4 h-fit min-w-0 space-y-4">
           {signers.length <= PICKER_MAX ? (
             // A few people: pick by clicking their color, which doubles as the legend.
             <div>
               <p id="assign-to" className="mb-1 font-mono text-xs font-bold uppercase">
                 Assign to
               </p>
-              <div role="radiogroup" aria-labelledby="assign-to" className="grid gap-1">
+              <div role="radiogroup" aria-labelledby="assign-to" className="grid min-w-0 grid-cols-1 gap-1">
                 {signers.map((s) => (
                   <button
                     key={s.id}
                     type="button"
                     role="radio"
                     aria-checked={assignee === s.id}
+                    aria-label={who(s)}
+                    title={`${s.name} <${s.email}>`}
                     onClick={() => setAssignee(s.id)}
-                    className={`border-brutal flex items-center gap-2 px-2 py-1.5 text-left text-sm font-bold ${assignee === s.id ? "shadow-hard-sm" : "bg-paper hover:bg-yellow/40"}`}
+                    className={`border-brutal flex w-full min-w-0 items-center gap-2 px-2 py-1.5 text-left text-sm font-bold ${assignee === s.id ? "shadow-hard-sm" : "bg-paper hover:bg-yellow/40"}`}
                     style={assignee === s.id ? { background: color(s.id) } : undefined}
                   >
                     <span aria-hidden className="border-brutal h-3 w-3 shrink-0" style={{ background: color(s.id) }} />
-                    <span className="min-w-0 truncate">{who(s)}</span>
-                    {assignee === s.id && <span className="ml-auto font-mono text-[10px] uppercase">new fields</span>}
+                    {/* Name on top, email below, each cut with "..." so long addresses never spill onto the page. */}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate">{s.name}</span>
+                      {s.email && <span className="block truncate font-mono text-[10px] font-normal">{s.email}</span>}
+                    </span>
+                    {assignee === s.id && <span className="shrink-0 font-mono text-[10px] uppercase">new</span>}
                   </button>
                 ))}
               </div>
@@ -353,9 +367,9 @@ export function FieldEditor(props: {
               </label>
               <ul aria-label="Signer colors" className="space-y-1 text-sm">
                 {signers.map((s) => (
-                  <li key={s.id} className="flex items-center gap-2">
-                    <span aria-hidden className="border-brutal h-3 w-3" style={{ background: color(s.id) }} />
-                    {who(s)}
+                  <li key={s.id} className="flex min-w-0 items-center gap-2" title={`${s.name} <${s.email}>`}>
+                    <span aria-hidden className="border-brutal h-3 w-3 shrink-0" style={{ background: color(s.id) }} />
+                    <span className="min-w-0 truncate">{who(s)}</span>
                   </li>
                 ))}
               </ul>
@@ -543,7 +557,10 @@ export function FieldEditor(props: {
                   ))}
                   {fields
                     .filter((f) => f.page === page)
-                    .map((f) => (
+                    .map((f) => {
+                      // Tick-box sized fields: thin border and corner handles only, so they can sit on a printed box.
+                      const tiny = f.w * PAGE_W < 28 || f.h * h < 28;
+                      return (
                       <div
                         key={f.key}
                         role="button"
@@ -552,7 +569,7 @@ export function FieldEditor(props: {
                         title={f.groupKey ? `Question ${questionNo.get(f.groupKey)}${f.label ? `: ${f.label}` : ""} - ${f.option}` : (f.label ?? undefined)}
                         onPointerDown={(e) => startFieldDrag(e, f, "move")}
                         onFocus={() => setSelected(f.key)}
-                        className={`absolute flex cursor-move touch-none select-none items-center border-2 border-ink px-1 font-mono text-[10px] font-bold uppercase ${selected === f.key ? "z-10 outline outline-2 outline-offset-2 outline-red" : sel?.groupKey && f.groupKey === sel.groupKey ? "z-10 outline-dashed outline-2 outline-offset-2 outline-red" : ""}`}
+                        className={`absolute flex cursor-move touch-none select-none items-center border-ink font-mono ${tiny ? "border px-0" : "border-2 px-1"} text-[10px] font-bold uppercase ${selected === f.key ? "z-10 outline outline-2 outline-offset-2 outline-red" : sel?.groupKey && f.groupKey === sel.groupKey ? "z-10 outline-dashed outline-2 outline-offset-2 outline-red" : ""}`}
                         style={{ left: f.x * PAGE_W, top: f.y * h, width: f.w * PAGE_W, height: f.h * h, background: color(f.recipientId) }}
                       >
                         {f.groupKey && (
@@ -562,16 +579,17 @@ export function FieldEditor(props: {
                         )}
                         <span className="overflow-hidden whitespace-nowrap">{f.groupKey ? "" : f.label || f.type}</span>
                         {selected === f.key &&
-                          HANDLES.map(({ h: hd, cls }) => (
+                          (tiny ? TINY_HANDLES : HANDLES).map(({ h: hd, cls }) => (
                             <span
                               key={hd}
                               aria-hidden
                               onPointerDown={(e) => startFieldDrag(e, f, hd)}
-                              className={`absolute h-3 w-3 border-2 border-ink bg-paper ${cls}`}
+                              className={`absolute border-ink bg-paper ${tiny ? "h-2 w-2 border" : "h-3 w-3 border-2"} ${cls}`}
                             />
                           ))}
                       </div>
-                    ))}
+                      );
+                    })}
                 </div>
               );
             })}

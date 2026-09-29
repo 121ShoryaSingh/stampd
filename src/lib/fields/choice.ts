@@ -15,4 +15,5 @@ export const MAX_OPTION = 40;
 export const MAX_LABEL = 80;
 export const DEFAULT_OPTIONS = ["Yes", "No"];
 // One answer box: about the size of a printed check box.
-export const OPTION_SIZE = { w: 0.03, h: 0.023 };
+// About the size of a printed tick box (~9 pt), so boxes can sit exactly on the document's own.
+export const OPTION_SIZE = { w: 0.016, h: 0.012 };
