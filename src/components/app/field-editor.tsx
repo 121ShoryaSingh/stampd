@@ -7,7 +7,7 @@ import { PdfCanvas } from "@/components/pdf/pdf-canvas";
 import { Button } from "@/components/ui/button";
 import { clampBox, DEFAULT_FIELD_SIZE, type Box, type FieldKind } from "@/lib/fields/geometry";
 import { pruneOrphanFields } from "@/lib/fields/prune";
-import { alignToOthers, gridStepFor, moveBox, resizeBox, GRID_MAJOR_EVERY, type Guides, type Handle } from "@/lib/fields/snap";
+import { alignToOthers, gridStepFor, moveBox, resizeBox, GRID_MAJOR_EVERY, GRID_STEP as BASE_GRID_STEP, type Guides, type Handle } from "@/lib/fields/snap";
 
 type Recipient = { id: string; name: string; email: string; role: "signer" | "cc" };
 type EditorField = Box & { key: string; recipientId: string; type: FieldKind; page: number; required?: boolean };
@@ -230,6 +230,8 @@ export function FieldEditor(props: {
   }
 
   const minorPx = PAGE_W * GRID_STEP;
+  // Bold lines stay put on the page (every 10% of its width), so zooming in shows more fine lines between them.
+  const majorStep = BASE_GRID_STEP * GRID_MAJOR_EVERY;
   return (
     <div className="grid grid-cols-[15rem_1fr] gap-6" onPointerMove={onMove} onPointerUp={onUp}>
       <aside className="sticky top-4 h-fit space-y-4">
@@ -354,8 +356,8 @@ export function FieldEditor(props: {
                         "linear-gradient(to bottom, rgba(0,0,0,.07) 1px, transparent 1px)",
                       ].join(","),
                       backgroundSize: [
-                        `${minorPx * GRID_MAJOR_EVERY}px ${h * GRID_STEP * GRID_MAJOR_EVERY}px`,
-                        `${minorPx * GRID_MAJOR_EVERY}px ${h * GRID_STEP * GRID_MAJOR_EVERY}px`,
+                        `${PAGE_W * majorStep}px ${h * majorStep}px`,
+                        `${PAGE_W * majorStep}px ${h * majorStep}px`,
                         `${minorPx}px ${h * GRID_STEP}px`,
                         `${minorPx}px ${h * GRID_STEP}px`,
                       ].join(","),
