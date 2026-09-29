@@ -7,7 +7,7 @@ import { PdfCanvas } from "@/components/pdf/pdf-canvas";
 import { Button } from "@/components/ui/button";
 import { clampBox, DEFAULT_FIELD_SIZE, type Box, type FieldKind } from "@/lib/fields/geometry";
 import { pruneOrphanFields } from "@/lib/fields/prune";
-import { alignToOthers, moveBox, resizeBox, GRID_MAJOR_EVERY, GRID_STEP, type Guides, type Handle } from "@/lib/fields/snap";
+import { alignToOthers, gridStepFor, moveBox, resizeBox, GRID_MAJOR_EVERY, type Guides, type Handle } from "@/lib/fields/snap";
 
 type Recipient = { id: string; name: string; email: string; role: "signer" | "cc" };
 type EditorField = Box & { key: string; recipientId: string; type: FieldKind; page: number; required?: boolean };
@@ -35,7 +35,7 @@ const HANDLES: { h: Handle; cls: string }[] = [
 ];
 const COLORS = ["#FFE600", "#FF8AD8", "#00D26A", "#7FA8FF", "#FF9A6B"];
 const BASE_W = 760;
-const ZOOMS = [75, 100, 125];
+const ZOOMS = [75, 100, 125, 150, 200, 300, 400];
 const ALIGN_PX = 5;
 const NO_GUIDES: Guides = { v: [], h: [] };
 
@@ -56,6 +56,7 @@ export function FieldEditor(props: {
   const [dirty, setDirty] = useState(false);
   const [zoom, setZoom] = useState(100);
   const PAGE_W = (BASE_W * zoom) / 100;
+  const GRID_STEP = gridStepFor(zoom);
   const setFields = (u: React.SetStateAction<EditorField[]>) => {
     setAllFields(u);
     setDirty(true);
@@ -142,7 +143,7 @@ export function FieldEditor(props: {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [sel]);
+  }, [sel, GRID_STEP]);
 
   function addField(type: FieldKind, page: number, cx: number, cy: number) {
     if (!assignee) return;

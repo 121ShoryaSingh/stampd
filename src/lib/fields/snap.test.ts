@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { snapToGrid, moveBox, resizeBox, alignToOthers, MIN_SIZE } from "./snap";
+import { snapToGrid, moveBox, resizeBox, alignToOthers, gridStepFor, MIN_SIZE } from "./snap";
 
 const box = { x: 0.2, y: 0.2, w: 0.2, h: 0.1 };
 
@@ -59,5 +59,15 @@ describe("alignToOthers", () => {
   it("leaves the box alone when nothing is close", () => {
     const b = { x: 0.1, y: 0.1, w: 0.1, h: 0.05 };
     expect(alignToOthers(b, [other], 0.006)).toEqual({ box: b, guides: { v: [], h: [] } });
+  });
+});
+
+describe("gridStepFor", () => {
+  it("halves the grid each time the zoom doubles", () => {
+    expect(gridStepFor(100)).toBe(0.0125);
+    expect(gridStepFor(150)).toBe(0.0125);
+    expect(gridStepFor(200)).toBe(0.00625);
+    expect(gridStepFor(400)).toBe(0.003125);
+    expect(gridStepFor(50)).toBe(0.0125);
   });
 });

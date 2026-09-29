@@ -9,6 +9,11 @@ export const MIN_SIZE = 0.01;
 export const GRID_STEP = 0.0125;
 export const GRID_MAJOR_EVERY = 8;
 
+// Finer grid when zoomed in: half the step each time the zoom doubles.
+export function gridStepFor(zoom: number): number {
+  return GRID_STEP / 2 ** Math.max(0, Math.floor(Math.log2(zoom / 100)));
+}
+
 const r6 = (n: number) => Math.round(n * 1e6) / 1e6;
 const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
 
