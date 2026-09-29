@@ -97,7 +97,7 @@ describe("sealDocument", () => {
     const raw = Buffer.from(sealed.subarray(b + 1, c - 1).toString("latin1"), "hex");
     writeFileSync(join(dir, "sig.der"), raw.subarray(0, readTlv(raw, 0).end));
     writeFileSync(join(dir, "content.bin"), Buffer.concat([sealed.subarray(a, a + b), sealed.subarray(c, c + d)]));
-    const out = execFileSync("openssl", ["cms", "-verify", "-inform", "DER", "-in", join(dir, "sig.der"), "-binary", "-content", join(dir, "content.bin"), "-noverify", "-purpose", "any", "-out", "/dev/null"], { stdio: "pipe" });
+    const out = execFileSync("openssl", ["cms", "-verify", "-inform", "DER", "-in", join(dir, "sig.der"), "-binary", "-content", join(dir, "content.bin"), "-noverify", "-purpose", "any", "-out", join(dir, "out.bin")], { stdio: "pipe" });
     expect(out.toString()).toBe("");
   });
 
