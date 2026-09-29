@@ -121,7 +121,7 @@ export async function getSigningView(token: string, session: string | undefined)
     fields: await tx.field.findMany({
       where: { recipientId: ref.recipientId },
       orderBy: [{ page: "asc" }, { y: "asc" }, { x: "asc" }],
-      select: { id: true, type: true, page: true, x: true, y: true, w: true, h: true, required: true },
+      select: { id: true, type: true, page: true, x: true, y: true, w: true, h: true, required: true, label: true, groupKey: true, option: true, mark: true },
     }),
   }));
   return { title: env.title, name: rec.name, pdfUrl: await presignGet(doc.s3Key, 3600), pageSizes: doc.pageSizes as PageSize[], fields };

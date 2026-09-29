@@ -87,12 +87,18 @@ export async function submitSigning(token: string, session: string | undefined, 
       if (f.required && v !== "true") throw new ValidationError("Please tick every required checkbox");
       values.set(f.id, v);
     } else if (f.type === "choice") {
-      // Stored as "yes" or "no"; unanswered stays null.
-      const v = raw === "yes" || raw === "no" ? raw : null;
-      if (raw && !v) throw new ValidationError("Please answer Yes or No");
-      if (f.required && !v) throw new ValidationError("Please answer every Yes or No question");
-      values.set(f.id, v);
+      if (raw !== undefined && raw !== "true" && raw !== "false" && raw !== "") throw new ValidationError("Please pick an answer for each question");
     }
+  }
+  // Choice questions: at most one answer box picked; the picked box holds "true", the others "false".
+  const questions = new Map<string, typeof fields>();
+  for (const f of fields) if (f.type === "choice" && f.groupKey) questions.set(f.groupKey, [...(questions.get(f.groupKey) ?? []), f]);
+  for (const boxes of questions.values()) {
+    const picked = boxes.filter((b) => input.values[b.id] === "true");
+    const name = boxes[0].label ? `"${boxes[0].label}"` : "each question";
+    if (picked.length > 1) throw new ValidationError(`Please pick only one answer for ${name}`);
+    if (picked.length === 0 && boxes.some((b) => b.required)) throw new ValidationError(`Please answer ${name}`);
+    for (const b of boxes) values.set(b.id, picked.length ? String(b === picked[0]) : null);
   }
 
   const keys: Record<string, string> = {};

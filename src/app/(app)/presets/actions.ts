@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { EditorFieldSchema } from "@/lib/fields/schema";
 import { requireTenant } from "@/server/tenants/current";
 import { DomainError } from "@/server/errors";
 import {
@@ -94,16 +95,7 @@ export async function savePresetRolesAction(presetId: string, list: unknown) {
 }
 
 // The shared editor calls the assignee "recipientId"; here it is a role id.
-const Field = z.object({
-  recipientId: z.string().uuid(),
-  type: z.enum(["signature", "initials", "date", "text", "checkbox", "choice"]),
-  page: z.number().int(),
-  x: z.number(),
-  y: z.number(),
-  w: z.number(),
-  h: z.number(),
-  required: z.boolean().optional(),
-});
+const Field = EditorFieldSchema;
 
 export async function savePresetFieldsAction(presetId: string, list: unknown) {
   const a = await actor(presetId);

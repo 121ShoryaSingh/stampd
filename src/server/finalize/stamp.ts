@@ -3,7 +3,18 @@ import type { FieldType } from "@/server/db/types";
 import { fieldRect, pageFrame, toUser, type PageFrame } from "./geometry";
 import { printable } from "./fonts";
 
-export type StampField = { type: FieldType; page: number; x: number; y: number; w: number; h: number; value: string | null; image?: PDFImage | null };
+export type StampField = {
+  type: FieldType;
+  page: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  value: string | null;
+  image?: PDFImage | null;
+  option?: string | null;
+  mark?: "check" | "cross" | "circle" | "text" | null;
+};
 type Rect = ReturnType<typeof fieldRect>;
 
 const INK = rgb(0.05, 0.1, 0.45);
@@ -78,6 +89,20 @@ function drawImage(page: PDFPage, frame: PageFrame, r: Rect, img: PDFImage) {
   page.drawImage(img, { x: p.x, y: p.y, width: w, height: h, rotate: degrees(frame.rotation) });
 }
 
+function drawCross(page: PDFPage, frame: PageFrame, r: Rect) {
+  const at = (a: number, b: number) => toUser(frame, r.u + a * r.w, r.v + b * r.h);
+  const thickness = Math.max(1, Math.min(r.w, r.h) * 0.12);
+  page.drawLine({ start: at(0.2, 0.2), end: at(0.8, 0.8), thickness, color: INK });
+  page.drawLine({ start: at(0.8, 0.2), end: at(0.2, 0.8), thickness, color: INK });
+}
+
+// A ring a little larger than the box, for printed words such as "YES / NO".
+function drawRing(page: PDFPage, frame: PageFrame, r: Rect) {
+  const c = toUser(frame, r.u + r.w / 2, r.v + r.h / 2);
+  const thickness = Math.max(0.8, Math.min(r.w, r.h) * 0.08);
+  page.drawEllipse({ x: c.x, y: c.y, xScale: r.w * 0.58, yScale: r.h * 0.62, borderColor: INK, borderWidth: thickness, rotate: degrees(frame.rotation) });
+}
+
 function drawCheck(page: PDFPage, frame: PageFrame, r: Rect) {
   const pts = [
     [0.2, 0.55],
@@ -102,7 +127,12 @@ export function stampFields(doc: PDFDocument, fields: StampField[], font: PDFFon
     } else if (f.type === "checkbox") {
       if (f.value === "true") drawCheck(page, frame, r);
     } else if (f.type === "choice") {
-      if (f.value === "yes" || f.value === "no") drawText(page, frame, r, f.value === "yes" ? "Yes" : "No", font);
+      // Only the picked answer box is marked, in the question's style.
+      if (f.value !== "true") continue;
+      if (f.mark === "cross") drawCross(page, frame, r);
+      else if (f.mark === "circle") drawRing(page, frame, r);
+      else if (f.mark === "text") drawText(page, frame, r, printable(f.option ?? ""), font);
+      else drawCheck(page, frame, r);
     } else if (f.value) {
       drawText(page, frame, r, printable(f.value), font);
     }

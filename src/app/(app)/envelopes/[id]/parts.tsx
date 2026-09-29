@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { PDFDocumentProxy } from "pdfjs-dist";
+import { loadPdfjs } from "@/lib/pdfjs";
 import { Ban, Send } from "lucide-react";
 import { PdfCanvas } from "@/components/pdf/pdf-canvas";
 import { Button } from "@/components/ui/button";
@@ -16,8 +17,7 @@ export function Thumbnail({ url, width = 150 }: { url: string; width?: number })
   useEffect(() => {
     let alive = true;
     (async () => {
-      const pdfjs = await import("pdfjs-dist");
-      pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+      const pdfjs = await loadPdfjs();
       const d = await pdfjs.getDocument({ url }).promise;
       if (alive) setDoc(d);
     })().catch(() => {});

@@ -92,7 +92,7 @@ export default async function PresetPage({ params }: { params: Promise<{ id: str
             pdfUrl={pdfUrl}
             pageSizes={preset.pageSizes}
             recipients={roles.map((r) => ({ id: r.id, name: r.label, email: "", role: r.role }))}
-            initial={fields.map((f) => ({ key: f.id, recipientId: f.presetRoleId, type: f.type, page: f.page, x: f.x, y: f.y, w: f.w, h: f.h, required: f.required }))}
+            initial={fields.map((f) => ({ key: f.id, recipientId: f.presetRoleId, type: f.type, page: f.page, x: f.x, y: f.y, w: f.w, h: f.h, required: f.required, label: f.label, groupKey: f.groupKey, option: f.option, mark: f.mark }))}
             emptyText="Add at least one signer role above, then place its fields."
           />
         ) : (

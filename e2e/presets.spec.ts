@@ -23,7 +23,7 @@ async function placeSignatures(page: Page, labels: string[]) {
   await expect(canvas).toBeVisible();
   await page.getByRole("button", { name: "Signature" }).click();
   for (const [i, label] of labels.entries()) {
-    await page.getByLabel("Assign to").selectOption({ label });
+    await page.getByRole("radio", { name: label }).click();
     await canvas.click({ position: { x: 200, y: 150 + i * 200 } });
   }
   await page.getByRole("button", { name: "Save fields" }).click();

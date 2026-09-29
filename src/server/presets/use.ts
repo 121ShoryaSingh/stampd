@@ -60,7 +60,22 @@ export async function savePresetFromEnvelope(i: { tenantId: string; userId: stri
     const fields = env.fields.filter((f) => roleOf.has(f.recipientId));
     if (fields.length) {
       await tx.presetField.createMany({
-        data: fields.map((f) => ({ tenantId: i.tenantId, presetId, presetRoleId: roleOf.get(f.recipientId)!, type: f.type, page: f.page, x: f.x, y: f.y, w: f.w, h: f.h, required: f.required })),
+        data: fields.map((f) => ({
+          tenantId: i.tenantId,
+          presetId,
+          presetRoleId: roleOf.get(f.recipientId)!,
+          type: f.type,
+          page: f.page,
+          x: f.x,
+          y: f.y,
+          w: f.w,
+          h: f.h,
+          required: f.required,
+          label: f.label,
+          groupKey: f.groupKey,
+          option: f.option,
+          mark: f.mark,
+        })),
       });
     }
     return old;
@@ -128,7 +143,23 @@ export async function createEnvelopeFromPreset(i: { tenantId: string; userId: st
     const fields = preset.fields.filter((f) => recipientOf.has(f.presetRoleId) && preset.roles.find((r) => r.id === f.presetRoleId)!.role === "signer");
     if (fields.length) {
       await tx.field.createMany({
-        data: fields.map((f) => ({ tenantId: i.tenantId, envelopeId, documentId: doc.id, recipientId: recipientOf.get(f.presetRoleId)!, type: f.type, page: f.page, x: f.x, y: f.y, w: f.w, h: f.h, required: f.required })),
+        data: fields.map((f) => ({
+          tenantId: i.tenantId,
+          envelopeId,
+          documentId: doc.id,
+          recipientId: recipientOf.get(f.presetRoleId)!,
+          type: f.type,
+          page: f.page,
+          x: f.x,
+          y: f.y,
+          w: f.w,
+          h: f.h,
+          required: f.required,
+          label: f.label,
+          groupKey: f.groupKey,
+          option: f.option,
+          mark: f.mark,
+        })),
       });
     }
     // Usage ranks presets in the list.

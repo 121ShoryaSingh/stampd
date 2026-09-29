@@ -3,13 +3,29 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { PDFDocumentProxy } from "pdfjs-dist";
+import { loadPdfjs } from "@/lib/pdfjs";
 import { PdfCanvas } from "@/components/pdf/pdf-canvas";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { submitAction, declineAction } from "./actions";
 import { SignaturePad } from "./signature-pad";
 
-type Field = { id: string; type: "signature" | "initials" | "date" | "text" | "checkbox" | "choice"; page: number; x: number; y: number; w: number; h: number; required: boolean };
+type Field = {
+  id: string;
+  type: "signature" | "initials" | "date" | "text" | "checkbox" | "choice";
+  page: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  required: boolean;
+  label: string | null;
+  groupKey: string | null;
+  option: string | null;
+  mark: "check" | "cross" | "circle" | "text" | null;
+};
+// What a signer must do: one field, or one choice question (all its answer boxes).
+type Item = { key: string; fields: Field[]; required: boolean };
 type View = { title: string; name: string; pdfUrl: string; pageSizes: { w: number; h: number }[]; fields: Field[] };
 
 export function SignStep({ token, view }: { token: string; view: View }) {
@@ -31,8 +47,7 @@ export function SignStep({ token, view }: { token: string; view: View }) {
     window.addEventListener("resize", fit);
     let alive = true;
     (async () => {
-      const pdfjs = await import("pdfjs-dist");
-      pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+      const pdfjs = await loadPdfjs();
       const d = await pdfjs.getDocument({ url: view.pdfUrl }).promise;
       if (alive) setDoc(d);
     })().catch(() => setError("Could not load the document"));
@@ -42,17 +57,41 @@ export function SignStep({ token, view }: { token: string; view: View }) {
     };
   }, [view.pdfUrl]);
 
-  const filled = (f: Field) =>
-    f.type === "date" ? true : f.type === "signature" ? !!images.signature : f.type === "initials" ? !!images.initials : f.type === "checkbox" ? values[f.id] === "true" || !f.required : f.type === "choice" ? !!values[f.id] || !f.required : !!values[f.id]?.trim();
-  const required = view.fields.filter((f) => f.required || f.type === "signature" || f.type === "initials");
+  const items: Item[] = [];
+  for (const f of view.fields) {
+    const q = f.groupKey ? items.find((i) => i.key === f.groupKey) : undefined;
+    if (q) q.fields.push(f);
+    else items.push({ key: f.groupKey ?? f.id, fields: [f], required: f.required || f.type === "signature" || f.type === "initials" });
+  }
+  const questionOf = new Map(items.filter((i) => i.fields[0].groupKey).map((i, n) => [i.key, n + 1]));
+  const answered = (groupKey: string) => view.fields.some((b) => b.groupKey === groupKey && values[b.id] === "true");
+  const filled = (it: Item) => {
+    const f = it.fields[0];
+    if (f.groupKey) return answered(f.groupKey) || !it.required;
+    return f.type === "date" ? true : f.type === "signature" ? !!images.signature : f.type === "initials" ? !!images.initials : f.type === "checkbox" ? values[f.id] === "true" || !f.required : !!values[f.id]?.trim();
+  };
+  const required = items.filter((i) => i.required);
   const done = required.filter(filled).length;
   const complete = done === required.length;
+  const itemOf = (f: Field) => items.find((i) => i.key === (f.groupKey ?? f.id))!;
+
+  // Picking an answer clears the others of the same question; picking it again clears it.
+  function choose(f: Field) {
+    setValues((v) => {
+      const next = { ...v };
+      const was = v[f.id] === "true";
+      for (const b of view.fields) if (b.groupKey === f.groupKey) delete next[b.id];
+      if (!was) next[f.id] = "true";
+      return next;
+    });
+  }
 
   function next() {
-    const f = required.find((x) => !filled(x));
-    if (!f) return;
-    refs.current[f.id]?.scrollIntoView({ behavior: "smooth", block: "center" });
-    refs.current[f.id]?.focus();
+    const it = required.find((x) => !filled(x));
+    if (!it) return;
+    const el = refs.current[it.fields[0].id];
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    el?.focus();
   }
 
   async function finish() {
@@ -86,7 +125,7 @@ export function SignStep({ token, view }: { token: string; view: View }) {
                 .filter((f) => f.page === page)
                 .map((f) => {
                   const style = { left: f.x * width, top: f.y * h, width: f.w * width, height: f.h * h };
-                  const ok = filled(f);
+                  const ok = filled(itemOf(f));
                   const ring = `absolute border-2 border-ink ${ok ? "bg-green/30" : "bg-yellow/80 animate-pulse"}`;
                   if (f.type === "text") {
                     return (
@@ -95,8 +134,9 @@ export function SignStep({ token, view }: { token: string; view: View }) {
                         ref={(el) => {
                           refs.current[f.id] = el;
                         }}
-                        aria-label="text field"
-                        placeholder="Enter text"
+                        aria-label={f.label ?? "text field"}
+                        title={f.label ?? undefined}
+                        placeholder={f.label ? `Enter ${f.label}` : "Enter text"}
                         maxLength={500}
                         value={values[f.id] ?? ""}
                         onChange={(e) => setValues((v) => ({ ...v, [f.id]: e.target.value }))}
@@ -106,24 +146,27 @@ export function SignStep({ token, view }: { token: string; view: View }) {
                     );
                   }
                   if (f.type === "choice") {
+                    const chosen = values[f.id] === "true";
+                    const name = `${f.label ? `${f.label}: ` : `Question ${questionOf.get(f.groupKey!)}: `}${f.option}`;
                     return (
-                      <div key={f.id} role="radiogroup" aria-label="Yes or No question" className={`${ring} flex`} style={style}>
-                        {(["yes", "no"] as const).map((opt, i) => (
-                          <button
-                            key={opt}
-                            type="button"
-                            role="radio"
-                            aria-checked={values[f.id] === opt}
-                            ref={(el) => {
-                              if (i === 0) refs.current[f.id] = el;
-                            }}
-                            onClick={() => setValues((v) => ({ ...v, [f.id]: opt }))}
-                            className={`flex-1 font-mono text-[10px] font-bold uppercase ${values[f.id] === opt ? "bg-ink text-paper" : ""}`}
-                          >
-                            {opt === "yes" ? "Yes" : "No"}
-                          </button>
-                        ))}
-                      </div>
+                      <button
+                        key={f.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={chosen}
+                        aria-label={name}
+                        title={name}
+                        ref={(el) => {
+                          refs.current[f.id] = el;
+                        }}
+                        onClick={() => choose(f)}
+                        className={`absolute flex items-center justify-center overflow-hidden border-2 border-ink font-mono text-[10px] font-bold uppercase ${
+                          chosen ? "bg-green/40" : ok ? "bg-paper/40" : "bg-yellow/80 animate-pulse"
+                        } ${chosen && f.mark === "circle" ? "rounded-full" : ""}`}
+                        style={style}
+                      >
+                        {chosen ? (f.mark === "text" ? f.option : f.mark === "cross" ? "X" : f.mark === "circle" ? "" : "\u2713") : ""}
+                      </button>
                     );
                   }
                   if (f.type === "date") {
@@ -141,7 +184,8 @@ export function SignStep({ token, view }: { token: string; view: View }) {
                       ref={(el) => {
                         refs.current[f.id] = el;
                       }}
-                      aria-label={`${f.type} field`}
+                      aria-label={f.label ?? `${f.type} field`}
+                      title={f.label ?? undefined}
                       onClick={() => (f.type === "checkbox" ? setValues((v) => ({ ...v, [f.id]: v[f.id] === "true" ? "false" : "true" })) : setPad(f.type as "signature" | "initials"))}
                       className={`${ring} flex items-center justify-center font-mono text-[10px] font-bold uppercase`}
                       style={style}

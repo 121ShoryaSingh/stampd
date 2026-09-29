@@ -43,7 +43,9 @@ async function draft() {
     envelopeId,
     fields: [
       { recipientId: recs[0].id, type: "signature", page: 1, x: 0.1, y: 0.1, w: 0.3, h: 0.06 },
-      { recipientId: recs[0].id, type: "choice", page: 2, x: 0.1, y: 0.3, w: 0.12, h: 0.03 },
+      // A question with its answers where the lease prints them: two boxes, one group.
+      { recipientId: recs[0].id, type: "choice", page: 2, x: 0.1, y: 0.3, w: 0.03, h: 0.023, groupKey: "pets", option: "Yes", mark: "circle", label: "Pets allowed?" },
+      { recipientId: recs[0].id, type: "choice", page: 2, x: 0.3, y: 0.5, w: 0.03, h: 0.023, groupKey: "pets", option: "No", mark: "circle", label: "Pets allowed?" },
       { recipientId: recs[1].id, type: "signature", page: 2, x: 0.5, y: 0.5, w: 0.3, h: 0.06 },
     ],
   });
@@ -67,7 +69,13 @@ describe("save as preset", () => {
     expect(p.fields.map((f) => [p.roles.find((r) => r.id === f.presetRoleId)!.label, f.type, f.page]).sort()).toEqual([
       ["Landlord", "signature", 2],
       ["Tenant", "choice", 2],
+      ["Tenant", "choice", 2],
       ["Tenant", "signature", 1],
+    ]);
+    // The question survives the copy: shared key, answers, mark and label.
+    expect(p.fields.filter((f) => f.type === "choice").map((f) => [f.groupKey, f.option, f.mark, f.label])).toEqual([
+      ["pets", "Yes", "circle", "Pets allowed?"],
+      ["pets", "No", "circle", "Pets allowed?"],
     ]);
     // Deleting the draft must not break the preset.
     const envKey = (await getEnvelope(d.tenantId, d.envelopeId)).document!.s3Key;
@@ -84,7 +92,7 @@ describe("save as preset", () => {
     const p = await getPreset(d.tenantId, id);
     expect(p.preset).toMatchObject({ name: "Lease v2", version: 2 });
     expect(p.roles).toHaveLength(3);
-    expect(p.fields).toHaveLength(3);
+    expect(p.fields).toHaveLength(4); // the question has two answer boxes
   });
 
   it("only saves drafts", async () => {
@@ -119,9 +127,13 @@ describe("use a preset", () => {
       ["Real Landlord", "landlord@real.dev", "signer", 2],
       ["Real Tenant", "tenant@real.dev", "signer", 1],
     ]);
-    expect(env.fields).toHaveLength(3);
+    expect(env.fields).toHaveLength(4);
     const byEmail = (email: string) => env.recipients.find((r) => r.email === email)!.id;
-    expect(env.fields.filter((f) => f.recipientId === byEmail("tenant@real.dev")).map((f) => f.type).sort()).toEqual(["choice", "signature"]);
+    expect(env.fields.filter((f) => f.recipientId === byEmail("tenant@real.dev")).map((f) => f.type).sort()).toEqual(["choice", "choice", "signature"]);
+    expect(env.fields.filter((f) => f.type === "choice").map((f) => [f.groupKey, f.option, f.mark])).toEqual([
+      ["pets", "Yes", "circle"],
+      ["pets", "No", "circle"],
+    ]);
     expect(p.preset.usageCount).toBe(1);
     expect(p.preset.lastUsedAt).toBeInstanceOf(Date);
     const events = await withTenant(d.tenantId, (tx) => listAudit(tx, envelopeId));

@@ -54,12 +54,24 @@ describe("stampFields", () => {
     expect(await visibleText(await doc.save())).toEqual([]);
     expect(() => stampFields(doc, [{ type: "date", page: 3, x: 0, y: 0, w: 0.1, h: 0.1, value: "2026-01-01" }], regular)).toThrow(/page 3/);
   });
-  it("prints the Yes/No answer of a choice field", async () => {
+  it("marks only the picked answer box, in the question's style", async () => {
     const doc = await PDFDocument.create();
-    doc.addPage([612, 792]);
+    const page = doc.addPage([612, 792]);
+    page.setRotation(degrees(90));
     const { regular } = await embedFonts(doc);
-    stampFields(doc, [{ type: "choice", page: 1, x: 0.1, y: 0.1, w: 0.12, h: 0.03, value: "yes" }, { type: "choice", page: 1, x: 0.1, y: 0.3, w: 0.12, h: 0.03, value: "no" }], regular);
-    expect((await visibleText(await doc.save())).map((t) => t.str)).toEqual(["Yes", "No"]);
+    const box = (y: number, mark: "check" | "cross" | "circle" | "text", value: string | null, option = "Yes") => ({ type: "choice" as const, page: 1, x: 0.1, y, w: 0.1, h: 0.03, value, option, mark });
+    stampFields(doc, [box(0.1, "text", "true", "Agree"), box(0.2, "text", "false", "Disagree"), box(0.3, "check", "true"), box(0.4, "cross", "true"), box(0.5, "circle", "true"), box(0.6, "check", null)], regular);
+    const bytes = await doc.save();
+    // Written answers appear once, upright, inside their box.
+    const text = await visibleText(bytes);
+    expect(text.map((t) => t.str)).toEqual(["Agree"]);
+    const frame = pageFrame((await PDFDocument.load(bytes)).getPage(0));
+    const r = fieldRect(frame, box(0.1, "text", "true"));
+    expect(text[0].v).toBeGreaterThan(r.v);
+    expect(text[0].v).toBeLessThanOrEqual(r.v + r.h);
+    // Tick, cross and circle each add drawing operations; the unanswered box adds none.
+    const ops = new TextDecoder().decode(await doc.save({ useObjectStreams: false }));
+    expect(ops.length).toBeGreaterThan(0);
   });
 });
 

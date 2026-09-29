@@ -7,11 +7,11 @@ import { NotFoundError, ValidationError } from "@/server/errors";
 import { assertAdmin } from "@/server/team/service";
 import { normalizeEmail } from "@/server/team/email";
 import { readUploadedPdf } from "@/server/envelopes/service";
-import { checkFieldPlacement, MAX_FIELDS } from "@/server/envelopes/fields";
+import { checkFieldPlacement, normalizeFields, MAX_FIELDS, type FieldExtras } from "@/server/envelopes/fields";
 import { MAX_RECIPIENTS } from "@/server/envelopes/recipients";
 
 export type PresetRoleInput = { id?: string; label: string; role: "signer" | "cc"; routingOrder: number; defaultName?: string | null; defaultEmail?: string | null };
-export type PresetFieldInput = { roleId: string; type: FieldType; page: number; x: number; y: number; w: number; h: number; required?: boolean };
+export type PresetFieldInput = { roleId: string; type: FieldType; page: number; x: number; y: number; w: number; h: number } & FieldExtras;
 type Actor = { tenantId: string; userId: string; presetId: string };
 
 const UPLOAD_RE = /^t\/([0-9a-f-]{36})\/p\/([0-9a-f-]{36})\/[0-9a-f-]{36}\.pdf$/;
@@ -140,13 +140,28 @@ export async function savePresetFields(i: Actor & { fields: PresetFieldInput[] }
     const preset = await adminLock(tx, i, true);
     if (!preset.s3Key) throw new ValidationError("Upload a PDF before placing fields");
     const roles = new Map((await tx.presetRole.findMany({ where: { presetId: i.presetId } })).map((r) => [r.id, r]));
-    const rows = i.fields.map((f) => {
+    for (const f of i.fields) {
       checkFieldPlacement(f, preset.pageCount);
       const role = roles.get(f.roleId);
       if (!role) throw new ValidationError("A field is assigned to a role that is not on this preset");
       if (role.role === "cc") throw new ValidationError(`${role.label} is cc only and cannot have fields`);
-      return { tenantId: i.tenantId, presetId: i.presetId, presetRoleId: f.roleId, type: f.type, page: f.page, x: f.x, y: f.y, w: f.w, h: f.h, required: f.required ?? f.type !== "checkbox" };
-    });
+    }
+    const rows = normalizeFields(i.fields, (f) => f.roleId).map((f) => ({
+      tenantId: i.tenantId,
+      presetId: i.presetId,
+      presetRoleId: f.roleId,
+      type: f.type,
+      page: f.page,
+      x: f.x,
+      y: f.y,
+      w: f.w,
+      h: f.h,
+      required: f.required,
+      label: f.label,
+      groupKey: f.groupKey,
+      option: f.option,
+      mark: f.mark,
+    }));
     await tx.presetField.deleteMany({ where: { presetId: i.presetId } });
     if (rows.length) await tx.presetField.createMany({ data: rows });
     return rows.length;
@@ -203,7 +218,22 @@ export async function duplicatePreset(i: Actor) {
     }
     if (src.fields.length) {
       await tx.presetField.createMany({
-        data: src.fields.map((f) => ({ tenantId: i.tenantId, presetId: id, presetRoleId: roleIds.get(f.presetRoleId)!, type: f.type, page: f.page, x: f.x, y: f.y, w: f.w, h: f.h, required: f.required })),
+        data: src.fields.map((f) => ({
+          tenantId: i.tenantId,
+          presetId: id,
+          presetRoleId: roleIds.get(f.presetRoleId)!,
+          type: f.type,
+          page: f.page,
+          x: f.x,
+          y: f.y,
+          w: f.w,
+          h: f.h,
+          required: f.required,
+          label: f.label,
+          groupKey: f.groupKey,
+          option: f.option,
+          mark: f.mark,
+        })),
       });
     }
     return { id };

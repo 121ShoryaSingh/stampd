@@ -69,19 +69,39 @@ test("two signers sign in order and the envelope completes", async ({ page, brow
   await signingCopy("bo@e2e.dev", "Two Step Deal", since);
 });
 
-test("a signer must answer a Yes/No question before finishing", async ({ page, browser }) => {
+test("a question's answer boxes go where the document shows them, and the signer picks one", async ({ page, browser }) => {
   await signUpWithWorkspace(page, newUser("owner"));
-  const [link] = await createAndSend(page, "Choice Deal", [{ name: "Cy Choice", email: "cy@e2e.dev" }], { choice: true });
+  const [link] = await createAndSend(page, "Choice Deal", [{ name: "Cy Choice", email: "cy@e2e.dev" }], {
+    choice: true,
+    beforeSave: async (p) => {
+      // The Yes box is selected after placing; name the question and choose the cross style.
+      await p.getByLabel("Question", { exact: true }).fill("Any mortgages?");
+      await p.getByLabel("Mark the chosen answer").selectOption({ label: "Cross the box" });
+      // Move the No box to another spot, as a form with answers on separate lines would need.
+      const no = p.getByRole("button", { name: "question 1 answer No" });
+      const b = (await no.boundingBox())!;
+      await p.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+      await p.mouse.down();
+      await p.mouse.move(b.x + 40, b.y + 120, { steps: 5 });
+      await p.mouse.up();
+      await p.getByLabel("Answer label").fill("No, none");
+      await expect(p.getByLabel("Question", { exact: true })).toHaveValue("Any mortgages?");
+    },
+  });
   const signer = await signerPage(browser, link);
   await enterCode(signer, "cy@e2e.dev");
   await signer.getByRole("checkbox").check();
   await signer.getByRole("button", { name: "I agree" }).click();
-  const question = signer.getByRole("radiogroup", { name: "Yes or No question" });
-  await expect(question).toBeVisible();
+  const yes = signer.getByRole("radio", { name: "Any mortgages?: Yes" });
+  const no = signer.getByRole("radio", { name: "Any mortgages?: No, none" });
   await expect(signer.getByText("0 of 2 required")).toBeVisible();
-  await question.getByRole("radio", { name: "No" }).click();
-  await expect(question.getByRole("radio", { name: "No" })).toHaveAttribute("aria-checked", "true");
+  await no.click();
+  await expect(no).toHaveAttribute("aria-checked", "true");
   await expect(signer.getByText("1 of 2 required")).toBeVisible();
+  // Picking the other answer clears the first: one answer per question.
+  await yes.click();
+  await expect(yes).toHaveAttribute("aria-checked", "true");
+  await expect(no).toHaveAttribute("aria-checked", "false");
 });
 
 test("a signer declines and the envelope closes for everyone", async ({ page, browser }) => {

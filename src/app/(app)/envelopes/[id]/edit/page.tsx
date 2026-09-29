@@ -41,7 +41,7 @@ export default async function EditPage({ params }: { params: Promise<{ id: strin
           pdfUrl={pdfUrl}
           pageSizes={data.document.pageSizes}
           recipients={data.recipients.map((r) => ({ id: r.id, name: r.name, email: r.email, role: r.role }))}
-          initial={data.fields.map((f) => ({ key: f.id, recipientId: f.recipientId, type: f.type, page: f.page, x: f.x, y: f.y, w: f.w, h: f.h }))}
+          initial={data.fields.map((f) => ({ key: f.id, recipientId: f.recipientId, type: f.type, page: f.page, x: f.x, y: f.y, w: f.w, h: f.h, required: f.required, label: f.label, groupKey: f.groupKey, option: f.option, mark: f.mark }))}
         />
       </Card>
     </div>

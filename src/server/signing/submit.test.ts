@@ -126,16 +126,22 @@ describe("submitSigning", () => {
 });
 
 describe("choice fields", () => {
-  it("requires a Yes or No answer and saves it", async () => {
+  it("takes exactly one answer per question and stores which box was picked", async () => {
     const s = await sentEnvelope(admin, { withChoice: true });
     const session = await ready(s.links[0].token!);
-    const choice = (await getSigningView(s.links[0].token!, session)).fields.find((f) => f.type === "choice")!;
-    expect(choice.required).toBe(true);
+    const boxes = (await getSigningView(s.links[0].token!, session)).fields.filter((f) => f.type === "choice");
+    expect(boxes.map((b) => [b.option, b.label, b.required, b.mark])).toEqual([
+      ["Yes", "Any mortgages?", true, "check"],
+      ["No", "Any mortgages?", true, "check"],
+    ]);
+    const [yes, no] = boxes;
     const base = { signaturePng: png() };
-    await expect(submitSigning(s.links[0].token!, session, { ...base, values: {} }, meta)).rejects.toThrow(/Yes or No/);
-    await expect(submitSigning(s.links[0].token!, session, { ...base, values: { [choice.id]: "maybe" } }, meta)).rejects.toThrow(/Yes or No/);
-    await expect(submitSigning(s.links[0].token!, session, { ...base, values: { [choice.id]: "no" } }, meta)).resolves.toBeTruthy();
-    expect((await admin.field.findUniqueOrThrow({ where: { id: choice.id } })).value).toBe("no");
+    await expect(submitSigning(s.links[0].token!, session, { ...base, values: {} }, meta)).rejects.toThrow(/Please answer "Any mortgages\?"/);
+    await expect(submitSigning(s.links[0].token!, session, { ...base, values: { [yes.id]: "true", [no.id]: "true" } }, meta)).rejects.toThrow(/only one answer/);
+    await expect(submitSigning(s.links[0].token!, session, { ...base, values: { [yes.id]: "maybe" } }, meta)).rejects.toThrow(/pick an answer/);
+    await expect(submitSigning(s.links[0].token!, session, { ...base, values: { [no.id]: "true" } }, meta)).resolves.toBeTruthy();
+    const saved = await admin.field.findMany({ where: { id: { in: [yes.id, no.id] } } });
+    expect(Object.fromEntries(saved.map((f) => [f.option, f.value]))).toEqual({ Yes: "false", No: "true" });
   });
 });
 

@@ -163,6 +163,16 @@ enum FieldType {
   @@map("field_type")
 }
 
+// How the chosen answer of a choice question is marked on the signed PDF.
+enum ChoiceMark {
+  check
+  cross
+  circle
+  text
+
+  @@map("choice_mark")
+}
+
 enum ActorType {
   user
   recipient
@@ -269,6 +279,12 @@ model Field {
   required       Boolean   @default(true)
   value          String?
   signatureS3Key String?   @map("signature_s3_key")
+  // Sender's name for the field, shown in the editor and to the signer; for a choice, the question.
+  label          String?
+  // Choice questions: one row per answer box; boxes of one question share groupKey.
+  groupKey       String?     @map("group_key")
+  option         String?
+  mark           ChoiceMark?
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
   envelope       Envelope  @relation(fields: [envelopeId], references: [id], onDelete: Cascade)
   document       Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
@@ -396,6 +412,10 @@ model PresetField {
   w            Float
   h            Float
   required     Boolean    @default(true)
+  label        String?
+  groupKey     String?     @map("group_key")
+  option       String?
+  mark         ChoiceMark?
   preset       Preset     @relation(fields: [presetId], references: [id], onDelete: Cascade)
   role         PresetRole @relation(fields: [presetRoleId], references: [id], onDelete: Cascade)
 
