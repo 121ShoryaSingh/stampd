@@ -7,7 +7,7 @@ import { isValidBox } from "@/lib/fields/geometry";
 import { lockDraft } from "./service";
 
 export const MAX_FIELDS = 500;
-const TYPES: FieldType[] = ["signature", "initials", "date", "text", "checkbox"];
+const TYPES: FieldType[] = ["signature", "initials", "date", "text", "checkbox", "choice"];
 export type FieldInput = { recipientId: string; type: FieldType; page: number; x: number; y: number; w: number; h: number; required?: boolean };
 
 export async function saveFields(i: { tenantId: string; userId: string; envelopeId: string; fields: FieldInput[] }) {

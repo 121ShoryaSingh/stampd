@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Calendar, CheckSquare, Crosshair, GripVertical, PenLine, Signature, TextCursorInput } from "lucide-react";
+import { Calendar, CheckSquare, CircleDot, Crosshair, GripVertical, PenLine, Signature, TextCursorInput } from "lucide-react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { PdfCanvas } from "@/components/pdf/pdf-canvas";
 import { saveFieldsAction } from "./actions";
@@ -22,6 +22,7 @@ const KINDS: { type: FieldKind; label: string; Icon: typeof PenLine }[] = [
   { type: "date", label: "Date", Icon: Calendar },
   { type: "text", label: "Text", Icon: TextCursorInput },
   { type: "checkbox", label: "Checkbox", Icon: CheckSquare },
+  { type: "choice", label: "Yes / No", Icon: CircleDot },
 ];
 const HANDLES: { h: Handle; cls: string }[] = [
   { h: "nw", cls: "-left-1.5 -top-1.5 cursor-nwse-resize" },

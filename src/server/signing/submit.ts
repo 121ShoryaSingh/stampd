@@ -86,6 +86,12 @@ export async function submitSigning(token: string, session: string | undefined, 
       const v = raw === "true" ? "true" : "false";
       if (f.required && v !== "true") throw new ValidationError("Please tick every required checkbox");
       values.set(f.id, v);
+    } else if (f.type === "choice") {
+      // Stored as "yes" or "no"; unanswered stays null.
+      const v = raw === "yes" || raw === "no" ? raw : null;
+      if (raw && !v) throw new ValidationError("Please answer Yes or No");
+      if (f.required && !v) throw new ValidationError("Please answer every Yes or No question");
+      values.set(f.id, v);
     }
   }
 

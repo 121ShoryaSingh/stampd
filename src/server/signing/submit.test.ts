@@ -125,6 +125,20 @@ describe("submitSigning", () => {
   });
 });
 
+describe("choice fields", () => {
+  it("requires a Yes or No answer and saves it", async () => {
+    const s = await sentEnvelope(admin, { withChoice: true });
+    const session = await ready(s.links[0].token!);
+    const choice = (await getSigningView(s.links[0].token!, session)).fields.find((f) => f.type === "choice")!;
+    expect(choice.required).toBe(true);
+    const base = { signaturePng: png() };
+    await expect(submitSigning(s.links[0].token!, session, { ...base, values: {} }, meta)).rejects.toThrow(/Yes or No/);
+    await expect(submitSigning(s.links[0].token!, session, { ...base, values: { [choice.id]: "maybe" } }, meta)).rejects.toThrow(/Yes or No/);
+    await expect(submitSigning(s.links[0].token!, session, { ...base, values: { [choice.id]: "no" } }, meta)).resolves.toBeTruthy();
+    expect((await admin.field.findUniqueOrThrow({ where: { id: choice.id } })).value).toBe("no");
+  });
+});
+
 describe("declineSigning", () => {
   it("declines with a reason and closes the envelope for everyone", async () => {
     const s = await sentEnvelope(admin, { signers: 2, sameStep: true });

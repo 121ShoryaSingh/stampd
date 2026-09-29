@@ -28,7 +28,7 @@ export type Signer = { name: string; email: string };
 
 // Sender flow: new envelope, 1-page PDF, signers in order, one signature field each, send.
 // Returns the first signer's link (from the invite email); later signers are invited when their step starts.
-export async function createAndSend(page: Page, title: string, signers: Signer[]) {
+export async function createAndSend(page: Page, title: string, signers: Signer[], opts: { choice?: boolean } = {}) {
   const { PDFDocument } = await import("pdf-lib");
   await page.getByRole("link", { name: "New envelope" }).click();
   await page.getByLabel("Title").fill(title);
@@ -54,8 +54,15 @@ export async function createAndSend(page: Page, title: string, signers: Signer[]
     await page.getByLabel("Assign to").selectOption({ label: s.name });
     await canvas.click({ position: { x: 200, y: 150 + i * 200 } });
   }
+  // Optional Yes/No question for the first signer.
+  if (opts.choice) {
+    await page.getByRole("button", { name: "Yes / No" }).click();
+    await page.getByLabel("Assign to").selectOption({ label: signers[0].name });
+    await canvas.click({ position: { x: 200, y: 600 } });
+  }
+  const count = signers.length + (opts.choice ? 1 : 0);
   await page.getByRole("button", { name: "Save fields" }).click();
-  await expect(page.getByRole("status").filter({ hasText: `Saved ${signers.length} fields` })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: `Saved ${count} fields` })).toBeVisible();
 
   await page.getByRole("link", { name: "Back to envelope" }).click();
   const since = new Date();

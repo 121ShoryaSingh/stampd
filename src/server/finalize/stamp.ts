@@ -101,6 +101,8 @@ export function stampFields(doc: PDFDocument, fields: StampField[], font: PDFFon
       if (f.image) drawImage(page, frame, r, f.image);
     } else if (f.type === "checkbox") {
       if (f.value === "true") drawCheck(page, frame, r);
+    } else if (f.type === "choice") {
+      if (f.value === "yes" || f.value === "no") drawText(page, frame, r, f.value === "yes" ? "Yes" : "No", font);
     } else if (f.value) {
       drawText(page, frame, r, printable(f.value), font);
     }

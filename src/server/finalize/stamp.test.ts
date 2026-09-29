@@ -54,6 +54,13 @@ describe("stampFields", () => {
     expect(await visibleText(await doc.save())).toEqual([]);
     expect(() => stampFields(doc, [{ type: "date", page: 3, x: 0, y: 0, w: 0.1, h: 0.1, value: "2026-01-01" }], regular)).toThrow(/page 3/);
   });
+  it("prints the Yes/No answer of a choice field", async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([612, 792]);
+    const { regular } = await embedFonts(doc);
+    stampFields(doc, [{ type: "choice", page: 1, x: 0.1, y: 0.1, w: 0.12, h: 0.03, value: "yes" }, { type: "choice", page: 1, x: 0.1, y: 0.3, w: 0.12, h: 0.03, value: "no" }], regular);
+    expect((await visibleText(await doc.save())).map((t) => t.str)).toEqual(["Yes", "No"]);
+  });
 });
 
 describe("layoutText", () => {

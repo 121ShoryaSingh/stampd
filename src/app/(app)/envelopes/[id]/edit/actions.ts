@@ -10,7 +10,7 @@ import { DomainError } from "@/server/errors";
 const Recipient = z.object({ name: z.string().max(200), email: z.string().max(300), role: z.enum(["signer", "cc"]), routingOrder: z.number().int() });
 const Field = z.object({
   recipientId: z.string().uuid(),
-  type: z.enum(["signature", "initials", "date", "text", "checkbox"]),
+  type: z.enum(["signature", "initials", "date", "text", "checkbox", "choice"]),
   page: z.number().int(),
   x: z.number(),
   y: z.number(),

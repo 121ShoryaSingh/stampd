@@ -156,6 +156,7 @@ enum FieldType {
   date
   text
   checkbox
+  choice
 
   @@map("field_type")
 }

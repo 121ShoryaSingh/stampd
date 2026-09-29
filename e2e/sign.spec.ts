@@ -69,6 +69,21 @@ test("two signers sign in order and the envelope completes", async ({ page, brow
   await signingCopy("bo@e2e.dev", "Two Step Deal", since);
 });
 
+test("a signer must answer a Yes/No question before finishing", async ({ page, browser }) => {
+  await signUpWithWorkspace(page, newUser("owner"));
+  const [link] = await createAndSend(page, "Choice Deal", [{ name: "Cy Choice", email: "cy@e2e.dev" }], { choice: true });
+  const signer = await signerPage(browser, link);
+  await enterCode(signer, "cy@e2e.dev");
+  await signer.getByRole("checkbox").check();
+  await signer.getByRole("button", { name: "I agree" }).click();
+  const question = signer.getByRole("radiogroup", { name: "Yes or No question" });
+  await expect(question).toBeVisible();
+  await expect(signer.getByText("0 of 2 required")).toBeVisible();
+  await question.getByRole("radio", { name: "No" }).click();
+  await expect(question.getByRole("radio", { name: "No" })).toHaveAttribute("aria-checked", "true");
+  await expect(signer.getByText("1 of 2 required")).toBeVisible();
+});
+
 test("a signer declines and the envelope closes for everyone", async ({ page, browser }) => {
   await signUpWithWorkspace(page, newUser("decliner"));
   const [link] = await createAndSend(page, "Declined Deal", [{ name: "Cy Nope", email: "cy@e2e.dev" }]);

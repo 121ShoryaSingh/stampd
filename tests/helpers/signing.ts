@@ -13,7 +13,7 @@ import { submitSigning } from "@/server/signing/submit";
 
 // A sent envelope with N signers (s1@x.dev...), each with a signature and a date field.
 // links[i].token is null until that signer's step starts; then use tokenFor().
-export async function sentEnvelope(admin: AdminDb, opts: { signers?: number; sameStep?: boolean; withText?: boolean; reminderEveryDays?: number; cc?: boolean } = {}) {
+export async function sentEnvelope(admin: AdminDb, opts: { signers?: number; sameStep?: boolean; withText?: boolean; withChoice?: boolean; reminderEveryDays?: number; cc?: boolean } = {}) {
   const n = opts.signers ?? 1;
   const userId = (await insertUser(admin)).id;
   const { id: tenantId } = await createTenant({ userId, name: "Signing Co" });
@@ -43,6 +43,7 @@ export async function sentEnvelope(admin: AdminDb, opts: { signers?: number; sam
       { recipientId: r.id, type: "signature" as const, page: 1, x: 0.1, y: 0.1 + i * 0.2, w: 0.3, h: 0.06 },
       { recipientId: r.id, type: "date" as const, page: 1, x: 0.5, y: 0.1 + i * 0.2, w: 0.2, h: 0.03 },
       ...(opts.withText ? [{ recipientId: r.id, type: "text" as const, page: 1, x: 0.1, y: 0.18 + i * 0.2, w: 0.3, h: 0.03 }] : []),
+      ...(opts.withChoice ? [{ recipientId: r.id, type: "choice" as const, page: 1, x: 0.5, y: 0.18 + i * 0.2, w: 0.12, h: 0.03 }] : []),
     ]),
   });
   await sendEnvelope({ tenantId, userId, envelopeId, expiresInDays: 30, reminderEveryDays: opts.reminderEveryDays ?? null });

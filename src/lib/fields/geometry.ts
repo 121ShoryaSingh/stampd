@@ -1,5 +1,5 @@
 export type Box = { x: number; y: number; w: number; h: number };
-export type FieldKind = "signature" | "initials" | "date" | "text" | "checkbox";
+export type FieldKind = "signature" | "initials" | "date" | "text" | "checkbox" | "choice";
 
 // Default sizes as fractions of a US Letter page.
 export const DEFAULT_FIELD_SIZE: Record<FieldKind, { w: number; h: number }> = {
@@ -8,6 +8,7 @@ export const DEFAULT_FIELD_SIZE: Record<FieldKind, { w: number; h: number }> = {
   date: { w: 0.18, h: 0.035 },
   text: { w: 0.25, h: 0.035 },
   checkbox: { w: 0.03, h: 0.023 },
+  choice: { w: 0.12, h: 0.03 },
 };
 
 const EPS = 1e-9;

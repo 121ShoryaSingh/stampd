@@ -9,7 +9,7 @@ import { Modal } from "@/components/ui/modal";
 import { submitAction, declineAction } from "./actions";
 import { SignaturePad } from "./signature-pad";
 
-type Field = { id: string; type: "signature" | "initials" | "date" | "text" | "checkbox"; page: number; x: number; y: number; w: number; h: number; required: boolean };
+type Field = { id: string; type: "signature" | "initials" | "date" | "text" | "checkbox" | "choice"; page: number; x: number; y: number; w: number; h: number; required: boolean };
 type View = { title: string; name: string; pdfUrl: string; pageSizes: { w: number; h: number }[]; fields: Field[] };
 
 export function SignStep({ token, view }: { token: string; view: View }) {
@@ -43,7 +43,7 @@ export function SignStep({ token, view }: { token: string; view: View }) {
   }, [view.pdfUrl]);
 
   const filled = (f: Field) =>
-    f.type === "date" ? true : f.type === "signature" ? !!images.signature : f.type === "initials" ? !!images.initials : f.type === "checkbox" ? values[f.id] === "true" || !f.required : !!values[f.id]?.trim();
+    f.type === "date" ? true : f.type === "signature" ? !!images.signature : f.type === "initials" ? !!images.initials : f.type === "checkbox" ? values[f.id] === "true" || !f.required : f.type === "choice" ? !!values[f.id] || !f.required : !!values[f.id]?.trim();
   const required = view.fields.filter((f) => f.required || f.type === "signature" || f.type === "initials");
   const done = required.filter(filled).length;
   const complete = done === required.length;
@@ -103,6 +103,27 @@ export function SignStep({ token, view }: { token: string; view: View }) {
                         className={`${ring} px-1 text-sm`}
                         style={style}
                       />
+                    );
+                  }
+                  if (f.type === "choice") {
+                    return (
+                      <div key={f.id} role="radiogroup" aria-label="Yes or No question" className={`${ring} flex`} style={style}>
+                        {(["yes", "no"] as const).map((opt, i) => (
+                          <button
+                            key={opt}
+                            type="button"
+                            role="radio"
+                            aria-checked={values[f.id] === opt}
+                            ref={(el) => {
+                              if (i === 0) refs.current[f.id] = el;
+                            }}
+                            onClick={() => setValues((v) => ({ ...v, [f.id]: opt }))}
+                            className={`flex-1 font-mono text-[10px] font-bold uppercase ${values[f.id] === opt ? "bg-ink text-paper" : ""}`}
+                          >
+                            {opt === "yes" ? "Yes" : "No"}
+                          </button>
+                        ))}
+                      </div>
                     );
                   }
                   if (f.type === "date") {
