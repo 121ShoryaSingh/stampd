@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { createAndSend, enterCode, newUser, settle, signUpWithWorkspace } from "./helpers";
+import { addRecipients, createAndSend, enterCode, newUser, settle, signUpWithWorkspace, startEnvelope } from "./helpers";
 import { signingCode } from "./mail";
 
 // Contrast is checked on final colors: entrance fades are off under reduced motion (motion.spec.ts covers motion).
@@ -64,32 +64,34 @@ test("the signature pad is usable on a short landscape phone", async ({ page, br
 
 test("leaving the editor with unsaved fields asks first", async ({ page }) => {
   await signUpWithWorkspace(page, newUser("leave"));
-  await page.getByRole("link", { name: "New envelope" }).click();
-  await page.getByLabel("Title").fill("Leave Deal");
-  await page.getByRole("button", { name: "Create and upload PDF" }).click();
-  const { PDFDocument } = await import("pdf-lib");
-  const doc = await PDFDocument.create();
-  doc.addPage([612, 792]);
-  await page.getByTestId("pdf-input").setInputFiles({ name: "l.pdf", mimeType: "application/pdf", buffer: Buffer.from(await doc.save()) });
-  await page.getByRole("link", { name: "Edit recipients and fields" }).click();
-  await page.getByLabel("Recipient 1 name").fill("Lee Leave");
-  await page.getByLabel("Recipient 1 email").fill("lee@e2e.dev");
-  await page.getByRole("button", { name: "Save recipients" }).click();
-  await expect(page.getByRole("status").filter({ hasText: "Recipients saved" })).toBeVisible();
+  await startEnvelope(page, "Leave Deal");
+  await addRecipients(page, [{ name: "Lee Leave", email: "lee@e2e.dev" }]);
   await page.getByRole("button", { name: "Signature" }).click();
   await page.getByRole("button", { name: "Place at center" }).click();
   await expect(page.getByText("Unsaved changes")).toBeVisible();
 
-  let asked = false;
-  page.once("dialog", (d) => {
-    asked = true;
+  // Our own dialog, never the browser's.
+  let browserDialog = false;
+  page.on("dialog", (d) => {
+    browserDialog = true;
     void d.dismiss();
   });
   await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Team" }).click();
-  expect(asked).toBe(true);
-  await expect(page).toHaveURL(/\/edit$/);
+  const ask = page.getByRole("dialog", { name: "Leave without saving?" });
+  await expect(ask).toBeVisible();
+  await expect(ask.getByRole("button", { name: "Stay here" })).toBeFocused();
   await settle(page);
   expect(await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).exclude("canvas").analyze().then((r) => r.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id))).toEqual([]);
+  await ask.getByRole("button", { name: "Stay here" }).click();
+  await expect(ask).toBeHidden();
+  await expect(page).toHaveURL(/\/fields$/);
+  await expect(page.getByText("Unsaved changes")).toBeVisible();
+
+  // The wizard's Back button asks too; leaving goes where the link pointed.
+  await page.getByRole("link", { name: "Back", exact: true }).click();
+  await ask.getByRole("button", { name: "Leave without saving" }).click();
+  await expect(page).toHaveURL(/\/recipients$/);
+  expect(browserDialog).toBe(false);
 });
 
 test("signing works with the keyboard and the sign step passes axe", async ({ page, browser }) => {
@@ -129,7 +131,7 @@ test("after logout, Back does not show the dashboard", async ({ page }) => {
   await signUpWithWorkspace(page, newUser("back"));
   await page.getByRole("button", { name: "Account menu" }).click();
   await page.getByRole("button", { name: "Log out" }).click();
-  await expect(page).toHaveURL(/\/login/);
+  await expect(page).toHaveURL(/\/$/);
   await page.goBack();
   await expect(page.getByRole("heading", { name: "Envelopes" })).toBeHidden();
 });

@@ -1,21 +1,10 @@
 import { test, expect, type Page } from "@playwright/test";
-import { PDFDocument } from "pdf-lib";
-import { newUser, signUpWithWorkspace } from "./helpers";
+import { addRecipients, newUser, signUpWithWorkspace, startEnvelope } from "./helpers";
 
 async function readyEditor(page: Page) {
   await signUpWithWorkspace(page, newUser("editor"));
-  await page.getByRole("link", { name: "New envelope" }).click();
-  await page.getByLabel("Title").fill("Grid test");
-  await page.getByRole("button", { name: "Create and upload PDF" }).click();
-  const doc = await PDFDocument.create();
-  doc.addPage([612, 792]);
-  await page.getByTestId("pdf-input").setInputFiles({ name: "g.pdf", mimeType: "application/pdf", buffer: Buffer.from(await doc.save()) });
-  await expect(page.getByText(/1 pages/)).toBeVisible();
-  await page.getByRole("link", { name: "Edit recipients and fields" }).click();
-  await page.getByLabel("Recipient 1 name").fill("Gia Grid");
-  await page.getByLabel("Recipient 1 email").fill("gia@e2e.dev");
-  await page.getByRole("button", { name: "Save recipients" }).click();
-  await expect(page.getByRole("status").filter({ hasText: "Recipients saved" })).toBeVisible();
+  await startEnvelope(page, "Grid test");
+  await addRecipients(page, [{ name: "Gia Grid", email: "gia@e2e.dev" }]);
   await expect(page.getByTestId("page-1").locator("canvas")).toBeVisible();
 }
 
@@ -80,8 +69,11 @@ test("keyboard placement, zoom and unsaved indicator", async ({ page }) => {
   await expect(page.getByText("All changes saved")).toBeVisible();
 });
 
-test("recipients can be reordered with buttons", async ({ page }) => {
-  await readyEditor(page);
+test("recipients can be reordered with buttons, and the order is kept", async ({ page }) => {
+  await signUpWithWorkspace(page, newUser("order"));
+  await startEnvelope(page, "Order test");
+  await page.getByLabel("Recipient 1 name").fill("Amy First");
+  await page.getByLabel("Recipient 1 email").fill("amy@e2e.dev");
   await page.getByRole("button", { name: "Add recipient" }).click();
   await page.getByLabel("Recipient 2 name").fill("Zed Last");
   await page.getByLabel("Recipient 2 email").fill("zed@e2e.dev");
@@ -89,4 +81,11 @@ test("recipients can be reordered with buttons", async ({ page }) => {
   await expect(page.getByLabel("Recipient 1 name")).toHaveValue("Zed Last");
   await expect(page.getByLabel("Recipient 1 order")).toHaveValue("1");
   await expect(page.getByLabel("Recipient 2 order")).toHaveValue("2");
+  await page.getByRole("button", { name: "Save and continue" }).click();
+  await expect(page).toHaveURL(/\/fields$/);
+  // Back to the recipients step: saved, in the new order.
+  await page.getByRole("link", { name: "Back", exact: true }).click();
+  await expect(page).toHaveURL(/\/recipients$/);
+  await expect(page.getByLabel("Recipient 1 name")).toHaveValue("Zed Last");
+  await expect(page.getByLabel("Recipient 2 name")).toHaveValue("Amy First");
 });

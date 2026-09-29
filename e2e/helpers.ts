@@ -26,26 +26,49 @@ export async function signUpWithWorkspace(page: Page, u: TestUser) {
 
 export type Signer = { name: string; email: string };
 
-// Sender flow: new envelope, 1-page PDF, signers in order, one signature field each, send.
-// Returns the first signer's link (from the invite email); later signers are invited when their step starts.
-export async function createAndSend(page: Page, title: string, signers: Signer[], opts: { choice?: boolean; beforeSave?: (page: Page) => Promise<void> } = {}) {
+async function onePagePdf() {
   const { PDFDocument } = await import("pdf-lib");
-  await page.getByRole("link", { name: "New envelope" }).click();
-  await page.getByLabel("Title").fill(title);
-  await page.getByRole("button", { name: "Create and upload PDF" }).click();
   const doc = await PDFDocument.create();
   doc.addPage([612, 792]).drawText("Agreement", { x: 50, y: 700 });
-  await page.getByTestId("pdf-input").setInputFiles({ name: "a.pdf", mimeType: "application/pdf", buffer: Buffer.from(await doc.save()) });
-  await expect(page.getByText(/1 pages/)).toBeVisible();
+  return Buffer.from(await doc.save());
+}
 
-  await page.getByRole("link", { name: "Edit recipients and fields" }).click();
-  for (const [i, s] of signers.entries()) {
+// Wizard steps 1 and 2: title, then the PDF (1 page unless given). Ends on the recipients step.
+export async function startEnvelope(page: Page, title: string, pdf?: Buffer) {
+  await page.getByRole("link", { name: "New envelope" }).first().click();
+  await page.getByLabel("Title").fill(title);
+  await page.getByRole("button", { name: "Save and continue" }).click();
+  await expect(page).toHaveURL(/\/upload$/);
+  await page.getByTestId("pdf-input").setInputFiles({ name: "a.pdf", mimeType: "application/pdf", buffer: pdf ?? (await onePagePdf()) });
+  await expect(page.getByText(/\d+ pages/)).toBeVisible();
+  await page.getByRole("link", { name: "Continue", exact: true }).click();
+  await expect(page).toHaveURL(/\/recipients$/);
+}
+
+// Wizard step 3: signers in order. Ends on the fields step.
+export async function addRecipients(page: Page, people: Signer[]) {
+  for (const [i, s] of people.entries()) {
     if (i > 0) await page.getByRole("button", { name: "Add recipient" }).click();
     await page.getByLabel(`Recipient ${i + 1} name`).fill(s.name);
     await page.getByLabel(`Recipient ${i + 1} email`).fill(s.email);
   }
-  await page.getByRole("button", { name: "Save recipients" }).click();
-  await expect(page.getByRole("status").filter({ hasText: "Recipients saved" })).toBeVisible();
+  await page.getByRole("button", { name: "Save and continue" }).click();
+  await expect(page).toHaveURL(/\/fields$/);
+}
+
+// Wizard step 5 from the fields step: continue to review, then send. Lands on the status page.
+export async function reviewAndSend(page: Page) {
+  await page.getByRole("button", { name: "Save and continue" }).click();
+  await expect(page).toHaveURL(/\/review$/);
+  await page.getByRole("button", { name: "Send for signature" }).click();
+  await expect(page.getByText("Sent. Signing emails are on their way.")).toBeVisible();
+}
+
+// Sender flow: new envelope, 1-page PDF, signers in order, one signature field each, send.
+// Returns the first signer's link (from the invite email); later signers are invited when their step starts.
+export async function createAndSend(page: Page, title: string, signers: Signer[], opts: { choice?: boolean; beforeSave?: (page: Page) => Promise<void> } = {}) {
+  await startEnvelope(page, title);
+  await addRecipients(page, signers);
 
   const canvas = page.getByTestId("page-1").locator("canvas");
   await expect(canvas).toBeVisible();
@@ -65,10 +88,8 @@ export async function createAndSend(page: Page, title: string, signers: Signer[]
   await page.getByRole("button", { name: "Save fields" }).click();
   await expect(page.getByRole("status").filter({ hasText: `Saved ${count} fields` })).toBeVisible();
 
-  await page.getByRole("link", { name: "Back to envelope" }).click();
   const since = new Date();
-  await page.getByRole("button", { name: "Send for signature" }).click();
-  await expect(page.getByText("Sent. Signing emails are on their way.")).toBeVisible();
+  await reviewAndSend(page);
   return [await signingLink(signers[0].email, title, since)];
 }
 

@@ -70,9 +70,14 @@
 
 /* Buttons sink into their shadow when pressed. */
 @utility press {
+  position: relative;
   transition: transform 120ms var(--ease-snap), box-shadow 120ms var(--ease-snap), background-color 120ms;
+  /* The hit area stays where the button was: a pointer on its edge would otherwise flip hover on and off. */
+  &::after { content: ""; position: absolute; inset: -2.5px; }
   &:hover:not(:disabled) { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--color-ink); }
+  &:hover:not(:disabled)::after { transform: translate(2px, 2px); }
   &:active:not(:disabled) { transform: translate(4px, 4px); box-shadow: 0 0 0 var(--color-ink); }
+  &:active:not(:disabled)::after { transform: translate(-4px, -4px); }
 }
 
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }

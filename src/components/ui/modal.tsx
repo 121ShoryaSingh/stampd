@@ -14,7 +14,8 @@ export function Modal({ open, onClose, title, children, footer }: { open: boolea
   useEffect(() => {
     if (!open) return;
     const opener = document.activeElement as HTMLElement | null;
-    const first = ref.current?.querySelector<HTMLElement>(FOCUSABLE);
+    // A control marked data-autofocus (say, the safe choice in a confirm) wins over the first one.
+    const first = ref.current?.querySelector<HTMLElement>("[data-autofocus]") ?? ref.current?.querySelector<HTMLElement>(FOCUSABLE);
     first?.focus();
     return () => opener?.focus();
   }, [open]);

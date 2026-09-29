@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { fillSignup, newUser, settle, signUpWithWorkspace } from "./helpers";
+import { addRecipients, fillSignup, newUser, settle, signUpWithWorkspace, startEnvelope } from "./helpers";
 import { signingLink, waitForMail } from "./mail";
 
 async function uploadPdf(page: Page, pages = 1) {
@@ -63,12 +63,14 @@ test("an admin builds a preset and starts an envelope from it", async ({ page })
   await page.getByLabel("Client email").fill("cal@e2e.dev");
   await axe(page, "use preset");
   await page.getByRole("button", { name: "Create draft" }).click();
+  // Everything came from the preset, so the draft opens on its last step.
+  await expect(page).toHaveURL(/\/review$/);
   await expect(page.getByRole("heading", { name: "Service agreement for Acme" })).toBeVisible();
-  await expect(page.getByText("Envelope created from a preset")).toBeVisible();
 
   const since = new Date();
   await page.getByRole("button", { name: "Send for signature" }).click();
   await expect(page.getByText("Sent. Signing emails are on their way.")).toBeVisible();
+  await expect(page.getByText("Envelope created from a preset")).toBeVisible();
   expect(await signingLink("cal@e2e.dev", "Service agreement for Acme", since)).toContain("/sign/");
 
   await page.goto("/presets");
@@ -78,18 +80,11 @@ test("an admin builds a preset and starts an envelope from it", async ({ page })
 
 test("save a draft as a preset, duplicate it, archive and restore", async ({ page }) => {
   await signUpWithWorkspace(page, newUser("saver"));
-  await page.getByRole("link", { name: "New envelope" }).first().click();
-  await page.getByLabel("Title").fill("Lease");
-  await page.getByRole("button", { name: "Create and upload PDF" }).click();
-  await uploadPdf(page);
-  await expect(page.getByText(/1 pages/)).toBeVisible();
-  await page.getByRole("link", { name: "Edit recipients and fields" }).click();
-  await page.getByLabel("Recipient 1 name").fill("Tia Tenant");
-  await page.getByLabel("Recipient 1 email").fill("tia@e2e.dev");
-  await page.getByRole("button", { name: "Save recipients" }).click();
-  await expect(page.getByRole("status").filter({ hasText: "Recipients saved" })).toBeVisible();
+  await startEnvelope(page, "Lease");
+  await addRecipients(page, [{ name: "Tia Tenant", email: "tia@e2e.dev" }]);
   await placeSignatures(page, ["Tia Tenant"]);
-  await page.getByRole("link", { name: "Back to envelope" }).click();
+  await page.getByRole("button", { name: "Save and continue" }).click();
+  await expect(page).toHaveURL(/\/review$/);
 
   await page.getByRole("button", { name: "Save as preset" }).click();
   const dialog = page.getByRole("dialog", { name: "Save as preset" });
@@ -104,6 +99,7 @@ test("save a draft as a preset, duplicate it, archive and restore", async ({ pag
   await page.getByRole("button", { name: "Duplicate" }).click();
   await expect(page.getByRole("heading", { name: "Standard lease (copy)" })).toBeVisible();
   await page.getByRole("button", { name: "Archive" }).click();
+  await page.getByRole("dialog", { name: "Archive this preset?" }).getByRole("button", { name: "Archive" }).click();
   await expect(page.getByRole("button", { name: "Restore" })).toBeVisible();
 
   await page.goto("/presets");

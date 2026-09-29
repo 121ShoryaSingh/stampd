@@ -1,29 +1,25 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { Send } from "lucide-react";
 import { sendAction } from "./actions";
-import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DatePicker, daysUntil } from "@/components/ui/date-picker";
+import { WizardNav } from "@/components/app/wizard-nav";
 
 const DAY = 86_400_000;
 
-export function SendForm({ envelopeId }: { envelopeId: string }) {
-  const { show } = useToast();
-  // The page re-renders as "sent" and unmounts this form, so toast as soon as the action returns.
-  const [state, action, pending] = useActionState(async (prev: Awaited<ReturnType<typeof sendAction>>, form: FormData) => {
-    const res = await sendAction(prev, form);
-    if (res.invited) show("Sent. Signing emails are on their way.");
-    return res;
-  }, {});
+// Last wizard step; on success the action redirects to the envelope's status page.
+export function SendForm({ envelopeId, back }: { envelopeId: string; back: { href: string; label: string } }) {
+  const [state, action, pending] = useActionState(sendAction, {});
   const [days, setDays] = useState(30);
   // Fixed when the form mounts, so the calendar bounds do not move while it is open.
   const [today] = useState(() => Date.now());
   return (
-    <form action={action} className="space-y-4">
+    <form action={action} className="space-y-6">
       <input type="hidden" name="envelopeId" value={envelopeId} />
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid gap-4 sm:grid-cols-2">
         <DatePicker
           label="Expires on"
           name="expiresOn"
@@ -39,10 +35,17 @@ export function SendForm({ envelopeId }: { envelopeId: string }) {
         <span className="mb-1 block font-mono text-xs font-bold uppercase">Message to signers (optional)</span>
         <textarea name="message" maxLength={2000} rows={3} placeholder="Enter message to signers" className="border-brutal w-full bg-paper p-3 outline-none focus:bg-yellow" />
       </label>
-      {state.error && <p role="alert" className="border-brutal bg-red p-3 font-bold text-ink">{state.error}</p>}
-      <Button variant="primary" disabled={pending}>
-        {pending ? "Sending..." : "Send for signature"}
-      </Button>
+      <WizardNav
+        back={back}
+        next={
+          <div className="flex flex-wrap items-center gap-3">
+            {state.error && <p role="alert" className="border-brutal bg-red p-2 text-sm font-bold text-ink">{state.error}</p>}
+            <Button variant="primary" size="lg" loading={pending} icon={<Send aria-hidden className="h-5 w-5" />}>
+              {pending ? "Sending..." : "Send for signature"}
+            </Button>
+          </div>
+        }
+      />
     </form>
   );
 }

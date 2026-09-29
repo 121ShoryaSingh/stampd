@@ -1,6 +1,5 @@
-import Link from "next/link";
-import { notFound } from "next/navigation";
-import { Activity, Download, ExternalLink, FileText, PenLine, RotateCcw, ShieldCheck, Trash2 } from "lucide-react";
+import { notFound, redirect } from "next/navigation";
+import { Activity, ArrowLeft, Download, ExternalLink, FileText, RotateCcw, ShieldCheck } from "lucide-react";
 import { requireTenant } from "@/server/tenants/current";
 import { getEnvelope } from "@/server/envelopes/service";
 import { withTenant } from "@/server/db/context";
@@ -9,16 +8,15 @@ import { presignGet } from "@/server/storage/storage";
 import { NotFoundError } from "@/server/errors";
 import { deliveries, type Delivery } from "@/server/email/outbox";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Button, buttonSizes, buttonVariants } from "@/components/ui/button";
+import { ButtonLink } from "@/components/ui/button-link";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/ui/layout";
 import { StatusPill } from "@/components/app/status-pill";
-import { UploadForm } from "./upload-form";
-import { SendForm } from "./send-form";
-import { SavePresetButton } from "./save-preset";
-import { listPresets } from "@/server/presets/service";
 import { AutoRefresh, ResendButton, Thumbnail, VoidButton } from "./parts";
-import { deleteDraftAction, retryFinalizeAction } from "./actions";
+import { retryFinalizeAction } from "./actions";
+import { SentNotice } from "./sent-notice";
+import { firstOpenStep, progress, stepHref } from "./_wizard/steps";
 import { describeEvent, relativeTime } from "./activity";
 
 const time = (d: Date | null) => (d ? d.toISOString().replace("T", " ").slice(0, 16) + " UTC" : null);
@@ -32,22 +30,20 @@ function DeliveryLine({ d }: { d: Delivery | undefined }) {
   return <p className="mt-1 font-mono text-[10px]">{d.status === "sent" ? `${what} emailed ${time(d.at)}` : `${what} email queued`}</p>;
 }
 
-export default async function EnvelopePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string }> }) {
+export default async function EnvelopePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; sent?: string }> }) {
   const { tenant } = await requireTenant();
-  const [{ id }, { error }] = await Promise.all([params, searchParams]);
+  const [{ id }, { error, sent }] = await Promise.all([params, searchParams]);
   if (!/^[0-9a-f-]{36}$/.test(id)) notFound();
   const data = await getEnvelope(tenant.tenantId, id).catch((e) => {
     if (e instanceof NotFoundError) notFound();
     throw e;
   });
+  // Drafts are edited step by step; pick up where the sender left off.
+  if (data.envelope.status === "draft") redirect(stepHref(id, firstOpenStep(progress(data))));
   const { envelope, document, recipients, fields } = data;
   const [events, mail] = await Promise.all([withTenant(tenant.tenantId, (tx) => listAudit(tx, id)), deliveries(tenant.tenantId, id)]);
   const canResend = envelope.status === "sent" && !!envelope.expiresAt && envelope.expiresAt > new Date();
   const thumbUrl = document ? await presignGet(document.s3Key, 600) : null;
-  const isDraft = envelope.status === "draft";
-  // Admins can turn a ready draft into a workspace preset.
-  const canSavePreset = isDraft && tenant.role === "admin" && !!document && recipients.length > 0;
-  const presets = canSavePreset ? (await listPresets(tenant.tenantId)).map((p) => ({ id: p.id, name: p.name })) : [];
   const names = new Map(recipients.map((r) => [r.id, r.name]));
   const signers = recipients.filter((r) => r.role === "signer");
   const steps = [...new Set(signers.map((s) => s.routingOrder))].sort((a, b) => a - b);
@@ -55,6 +51,9 @@ export default async function EnvelopePage({ params, searchParams }: { params: P
 
   return (
     <div className="max-w-6xl space-y-6">
+      <ButtonLink href="/dashboard" size="lg" icon={<ArrowLeft aria-hidden className="h-5 w-5" />}>
+        All envelopes
+      </ButtonLink>
       <PageHeader
         title={envelope.title}
         subtitle={
@@ -66,22 +65,16 @@ export default async function EnvelopePage({ params, searchParams }: { params: P
         }
         actions={
           <>
-            {isDraft && document && (
-              <Link href={`/envelopes/${id}/edit`} className="border-brutal shadow-hard-sm press flex items-center gap-2 bg-yellow px-4 py-2.5 text-sm font-bold uppercase">
-                <PenLine aria-hidden className="h-4 w-4" /> Edit recipients and fields
-              </Link>
+            {envelope.sealedS3Key && (
+              <a href={`/envelopes/${id}/signed`} className={`border-brutal shadow-hard-sm press inline-flex items-center gap-2 font-bold uppercase tracking-wide ${buttonVariants.accent} ${buttonSizes.lg}`}>
+                <Download aria-hidden className="h-5 w-5" /> Signed PDF
+              </a>
             )}
-            {canSavePreset && <SavePresetButton envelopeId={id} title={envelope.title} presets={presets} />}
             {envelope.status === "sent" && <VoidButton envelopeId={id} />}
-            {isDraft && (
-              <form action={deleteDraftAction}>
-                <input type="hidden" name="envelopeId" value={id} />
-                <Button icon={<Trash2 aria-hidden className="h-4 w-4" />}>Delete draft</Button>
-              </form>
-            )}
           </>
         }
       />
+      {sent && envelope.status === "sent" && <SentNotice />}
       {error && <p role="alert" className="border-brutal bg-red p-3 font-bold text-ink">{error}</p>}
       {envelope.voidReason && (
         <p className="border-brutal bg-ink p-3 font-bold text-paper">Voided: {envelope.voidReason}</p>
@@ -105,11 +98,10 @@ export default async function EnvelopePage({ params, searchParams }: { params: P
                   <a href={`/envelopes/${id}/document`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-bold underline">
                     Open PDF <ExternalLink aria-hidden className="h-3 w-3" />
                   </a>
-                  {isDraft && <UploadForm envelopeId={id} hasDocument />}
                 </div>
               </div>
             ) : (
-              <UploadForm envelopeId={id} hasDocument={false} />
+              <p>No PDF.</p>
             )}
           </Card>
 
@@ -149,7 +141,7 @@ export default async function EnvelopePage({ params, searchParams }: { params: P
           <Card className="rise" style={{ "--i": 1 } as React.CSSProperties}>
             <h2 className="mb-4 font-display text-2xl">Signers</h2>
             {signers.length === 0 ? (
-              <p>No signers yet. {isDraft && document ? "Add them in the editor." : "Upload a PDF first."}</p>
+              <p>No signers.</p>
             ) : (
               <ol className="flex flex-col gap-4 md:flex-row md:flex-wrap md:items-stretch">
                 {steps.map((step, si) => (
@@ -171,7 +163,7 @@ export default async function EnvelopePage({ params, searchParams }: { params: P
                               <StatusPill status={s.status} />
                             </div>
                             <p className="mt-2 font-mono text-[10px]">
-                              {s.signedAt ? `Signed ${time(s.signedAt)}` : s.viewedAt ? `Opened ${time(s.viewedAt)}` : s.declineReason ? `Declined: ${s.declineReason}` : s.status === "pending" && !isDraft ? "Waiting for earlier steps" : "Not opened yet"}
+                              {s.signedAt ? `Signed ${time(s.signedAt)}` : s.viewedAt ? `Opened ${time(s.viewedAt)}` : s.declineReason ? `Declined: ${s.declineReason}` : s.status === "pending" ? "Waiting for earlier steps" : "Not opened yet"}
                             </p>
                             {!s.signedAt && !s.declinedAt && <DeliveryLine d={mail[s.id]} />}
                             {canResend && (s.status === "sent" || s.status === "viewed") && (
@@ -193,12 +185,6 @@ export default async function EnvelopePage({ params, searchParams }: { params: P
             )}
           </Card>
 
-          {isDraft && document && (
-            <Card className="rise" style={{ "--i": 2 } as React.CSSProperties}>
-              <h2 className="mb-4 font-display text-2xl">Send</h2>
-              <SendForm envelopeId={id} />
-            </Card>
-          )}
         </div>
 
         <Card className="rise h-fit" style={{ "--i": 1 } as React.CSSProperties}>

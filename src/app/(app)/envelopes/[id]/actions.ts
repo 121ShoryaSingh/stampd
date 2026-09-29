@@ -22,11 +22,11 @@ export async function finalizeUploadAction(envelopeId: string, key: string, file
   const { session, tenant } = await requireTenant();
   const p = z.object({ envelopeId: z.string().uuid(), key: z.string().max(300), filename: z.string().max(300) }).parse({ envelopeId, key, filename });
   const res = await guard(() => finalizeUpload({ tenantId: tenant.tenantId, userId: session.user.id, ...p }));
-  revalidatePath(`/envelopes/${envelopeId}`);
+  revalidatePath(`/envelopes/${envelopeId}`, "layout");
   return { error: res.error };
 }
 
-export async function sendAction(_prev: { error?: string; invited?: number }, form: FormData): Promise<{ error?: string; invited?: number }> {
+export async function sendAction(_prev: { error?: string }, form: FormData): Promise<{ error?: string }> {
   const { session, tenant } = await requireTenant();
   const p = z
     .object({
@@ -53,8 +53,8 @@ export async function sendAction(_prev: { error?: string; invited?: number }, fo
     }),
   );
   if (res.error) return { error: res.error };
-  revalidatePath(`/envelopes/${p.data.envelopeId}`);
-  return { invited: res.data!.invited };
+  revalidatePath(`/envelopes/${p.data.envelopeId}`, "layout");
+  redirect(`/envelopes/${p.data.envelopeId}?sent=1`);
 }
 
 export async function voidAction(form: FormData) {
@@ -87,6 +87,6 @@ export async function deleteDraftAction(form: FormData) {
   const { tenant } = await requireTenant();
   const envelopeId = z.string().uuid().parse(form.get("envelopeId"));
   const res = await guard(() => deleteDraft({ tenantId: tenant.tenantId, envelopeId }));
-  if (res.error) redirect(`/envelopes/${envelopeId}?error=${encodeURIComponent(res.error)}`);
+  if (res.error) redirect(`/envelopes/${envelopeId}/review?error=${encodeURIComponent(res.error)}`);
   redirect("/dashboard");
 }

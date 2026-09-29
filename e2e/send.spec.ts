@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { PDFDocument } from "pdf-lib";
-import { newUser, signUpWithWorkspace } from "./helpers";
+import { addRecipients, newUser, reviewAndSend, signUpWithWorkspace, startEnvelope } from "./helpers";
 import { signingLink } from "./mail";
 
 const TITLE = "E2E Contract";
@@ -14,8 +14,9 @@ async function pdfBuffer(pages: number) {
 async function newEnvelope(page: import("@playwright/test").Page, title: string) {
   await page.getByRole("link", { name: "New envelope" }).click();
   await page.getByLabel("Title").fill(title);
-  await page.getByRole("button", { name: "Create and upload PDF" }).click();
+  await page.getByRole("button", { name: "Save and continue" }).click();
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
+  await expect(page).toHaveURL(/\/upload$/);
 }
 
 test("create an envelope, upload, add a signer, place a field, send", async ({ page }) => {
@@ -24,12 +25,8 @@ test("create an envelope, upload, add a signer, place a field, send", async ({ p
 
   await page.getByTestId("pdf-input").setInputFiles({ name: "contract.pdf", mimeType: "application/pdf", buffer: await pdfBuffer(2) });
   await expect(page.getByText(/2 pages/)).toBeVisible();
-
-  await page.getByRole("link", { name: "Edit recipients and fields" }).click();
-  await page.getByLabel("Recipient 1 name").fill("Ann Signer");
-  await page.getByLabel("Recipient 1 email").fill("ann@e2e.dev");
-  await page.getByRole("button", { name: "Save recipients" }).click();
-  await expect(page.getByRole("status").filter({ hasText: "Recipients saved" })).toBeVisible();
+  await page.getByRole("link", { name: "Continue", exact: true }).click();
+  await addRecipients(page, [{ name: "Ann Signer", email: "ann@e2e.dev" }]);
 
   await page.getByRole("button", { name: "Signature" }).click();
   const page1 = page.getByTestId("page-1");
@@ -39,11 +36,9 @@ test("create an envelope, upload, add a signer, place a field, send", async ({ p
   await page.getByRole("button", { name: "Save fields" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Saved 1 fields" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Back to envelope" }).click();
-  await expect(page.getByText(/1 fields placed/)).toBeVisible();
   const since = new Date();
-  await page.getByRole("button", { name: "Send for signature" }).click();
-  await expect(page.getByText("Sent. Signing emails are on their way.")).toBeVisible();
+  await reviewAndSend(page);
+  await expect(page.getByText(/1 fields placed/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Void envelope" })).toBeVisible();
   const first = await signingLink("ann@e2e.dev", TITLE, since);
   await expect(page.getByText(/Invite email/).first()).toBeVisible();
@@ -58,7 +53,7 @@ test("create an envelope, upload, add a signer, place a field, send", async ({ p
   expect(await old.text()).toContain("This link is not valid");
 
   // The document link is minted fresh on each click.
-  const doc = await page.request.get(page.url() + "/document", { maxRedirects: 0 });
+  const doc = await page.request.get(page.url().split("?")[0] + "/document", { maxRedirects: 0 });
   expect(doc.status()).toBe(307);
   expect(doc.headers()["location"]).toContain("/doc/");
 
@@ -81,12 +76,38 @@ test("a text file renamed to .pdf is rejected", async ({ page }) => {
 
 test("the expiry date is picked from a calendar", async ({ page }) => {
   await signUpWithWorkspace(page, newUser("dates"));
-  await newEnvelope(page, "Dated Deal");
-  await page.getByTestId("pdf-input").setInputFiles({ name: "d.pdf", mimeType: "application/pdf", buffer: await pdfBuffer(1) });
-  await expect(page.getByText(/1 pages/)).toBeVisible();
+  // The send options are on the last step.
+  await startEnvelope(page, "Dated Deal");
+  await addRecipients(page, [{ name: "Dee Date", email: "dee@e2e.dev" }]);
+  await page.getByRole("button", { name: "Signature" }).click();
+  await page.getByRole("button", { name: "Place at center" }).click();
+  await page.getByRole("button", { name: "Save and continue" }).click();
+  await expect(page).toHaveURL(/\/review$/);
   await page.getByRole("button", { name: /Expires on/ }).click();
   const grid = page.getByRole("grid");
   await expect(grid).toBeVisible();
   await grid.getByRole("button", { name: /15th/ }).first().click();
   await expect(page.getByRole("button", { name: /Expires on: .*15th/ })).toBeVisible();
+});
+
+test("deleting a draft asks in our own dialog first", async ({ page }) => {
+  await signUpWithWorkspace(page, newUser("deleter"));
+  await startEnvelope(page, "Doomed Draft");
+  await addRecipients(page, [{ name: "Dot Doom", email: "dot@e2e.dev" }]);
+  await page.getByRole("button", { name: "Signature" }).click();
+  await page.getByRole("button", { name: "Place at center" }).click();
+  await page.getByRole("button", { name: "Save and continue" }).click();
+  await expect(page).toHaveURL(/\/review$/);
+
+  await page.getByRole("button", { name: "Delete draft" }).click();
+  const ask = page.getByRole("dialog", { name: "Delete this draft?" });
+  await expect(ask).toContainText("Doomed Draft");
+  await ask.getByRole("button", { name: "Cancel" }).click();
+  await expect(ask).toBeHidden();
+  await expect(page).toHaveURL(/\/review$/);
+
+  await page.getByRole("button", { name: "Delete draft" }).click();
+  await ask.getByRole("button", { name: "Delete draft" }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByRole("link", { name: "Doomed Draft" })).toHaveCount(0);
 });

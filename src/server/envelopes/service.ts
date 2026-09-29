@@ -41,6 +41,17 @@ export async function createEnvelope(i: { tenantId: string; userId: string; titl
   });
 }
 
+// Wizard step 1 on an existing draft.
+export async function renameDraft(i: { tenantId: string; userId: string; envelopeId: string; title: string }) {
+  const title = cleanTitle(i.title);
+  await withTenant(i.tenantId, async (tx) => {
+    const env = await lockDraft(tx, i.envelopeId);
+    if (env.title === title) return;
+    await tx.envelope.update({ where: { id: i.envelopeId }, data: { title } });
+    await appendAudit(tx, { tenantId: i.tenantId, envelopeId: i.envelopeId, actorType: "user", actorId: i.userId, event: "renamed", data: { title } });
+  });
+}
+
 export async function createUploadUrl(i: { tenantId: string; envelopeId: string }) {
   await withTenant(i.tenantId, (tx) => lockDraft(tx, i.envelopeId));
   const key = uploadKeyFor(i.tenantId, i.envelopeId);

@@ -36,7 +36,7 @@ export function VoidButton({ envelopeId }: { envelopeId: string }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button variant="danger" icon={<Ban aria-hidden className="h-4 w-4" />} onClick={() => setOpen(true)}>
+      <Button variant="danger" size="lg" icon={<Ban aria-hidden className="h-5 w-5" />} onClick={() => setOpen(true)}>
         Void envelope
       </Button>
       <Modal open={open} onClose={() => setOpen(false)} title="Void envelope">

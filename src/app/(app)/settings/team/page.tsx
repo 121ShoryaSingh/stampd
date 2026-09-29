@@ -3,6 +3,7 @@ import { requireTenant } from "@/server/tenants/current";
 import { listMembers, listPendingInvitations } from "@/server/team/service";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { ConfirmSubmit } from "@/components/ui/confirm";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader, Table, THead, TRow, TH, TD } from "@/components/ui/layout";
 import { InviteForm } from "./invite-form";
@@ -62,9 +63,15 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
                 {(isAdmin || m.userId === session.user.id) && (
                   <form action={removeMemberAction}>
                     <input type="hidden" name="userId" value={m.userId} />
-                    <Button size="sm" variant={m.userId === session.user.id ? "default" : "danger"}>
-                      {m.userId === session.user.id ? "Leave" : "Remove"}
-                    </Button>
+                    {m.userId === session.user.id ? (
+                      <ConfirmSubmit size="sm" confirm={{ title: "Leave this workspace?", message: "You lose access to its envelopes and presets until someone invites you again.", confirmLabel: "Leave", tone: "danger" }}>
+                        Leave
+                      </ConfirmSubmit>
+                    ) : (
+                      <ConfirmSubmit size="sm" variant="danger" confirm={{ title: `Remove ${m.email}?`, message: "They lose access to this workspace's envelopes and presets.", confirmLabel: "Remove", tone: "danger" }}>
+                        Remove
+                      </ConfirmSubmit>
+                    )}
                   </form>
                 )}
               </TD>
@@ -85,7 +92,9 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
                 </span>
                 <form action={revokeInviteAction}>
                   <input type="hidden" name="invitationId" value={i.id} />
-                  <Button size="sm">Revoke</Button>
+                  <ConfirmSubmit size="sm" confirm={{ title: "Revoke this invitation?", message: `The link sent to ${i.email} stops working.`, confirmLabel: "Revoke", tone: "danger" }}>
+                    Revoke
+                  </ConfirmSubmit>
                 </form>
               </li>
             ))}

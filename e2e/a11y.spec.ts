@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { createAndSend, newUser, settle, signUpWithWorkspace } from "./helpers";
+import { addRecipients, createAndSend, newUser, settle, signUpWithWorkspace, startEnvelope } from "./helpers";
 
 // Contrast is checked on final colors: entrance fades are off under reduced motion (motion.spec.ts covers motion).
 test.use({ reducedMotion: "reduce" });
@@ -37,6 +37,37 @@ test("app and signer pages have no serious accessibility issues", async ({ page,
   await axe(signer, "signer code step");
 });
 
+test("every wizard step passes axe and fits a phone", async ({ page }) => {
+  await signUpWithWorkspace(page, newUser("wizard"));
+  await page.goto("/envelopes/new");
+  await expect(page.getByText("Step 1 of 5: Details")).toBeHidden(); // desktop shows the full stepper
+  await expect(page.getByRole("navigation", { name: "Envelope steps" }).locator('[aria-current="step"]')).toContainText("Step 1: Details");
+  await startEnvelope(page, "Wizard Deal");
+  const base = page.url().replace(/\/recipients$/, "");
+  await axe(page, "recipients step");
+  await addRecipients(page, [{ name: "Wiz Ard", email: "wiz@e2e.dev" }]);
+  await page.getByRole("button", { name: "Signature" }).click();
+  await page.getByRole("button", { name: "Place at center" }).click();
+  await axe(page, "fields step");
+  await page.getByRole("button", { name: "Save and continue" }).click();
+  await expect(page).toHaveURL(/\/review$/);
+  await axe(page, "review step");
+  for (const step of ["details", "upload"]) {
+    await page.goto(`${base}/${step}`);
+    await axe(page, `${step} step`);
+  }
+  // A draft's own URL resumes at the first unfinished step; here everything is ready, so review.
+  await page.goto(base);
+  await expect(page).toHaveURL(/\/review$/);
+
+  await page.setViewportSize({ width: 375, height: 800 });
+  for (const step of ["details", "upload", "recipients", "review"]) {
+    await page.goto(`${base}/${step}`);
+    await expect(page.getByText(/Step \d of 5:/)).toBeVisible();
+    await noSideScroll(page, `${step} step`);
+  }
+});
+
 test("no page scrolls sideways at phone width", async ({ page, browser }) => {
   await page.setViewportSize({ width: 375, height: 800 });
   for (const path of ["/", "/login", "/signup"]) {
@@ -63,16 +94,18 @@ test("editor fields can be placed and moved with the keyboard", async ({ page })
   await page.getByRole("link", { name: "New envelope" }).click();
   await page.getByLabel("Title").fill("Keyboard Deal");
   await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/upload$/);
   const { PDFDocument } = await import("pdf-lib");
   const doc = await PDFDocument.create();
   doc.addPage([612, 792]);
   await page.getByTestId("pdf-input").setInputFiles({ name: "k.pdf", mimeType: "application/pdf", buffer: Buffer.from(await doc.save()) });
-  await page.getByRole("link", { name: "Edit recipients and fields" }).click();
+  await page.getByRole("link", { name: "Continue", exact: true }).focus();
+  await page.keyboard.press("Enter");
   await page.getByLabel("Recipient 1 name").fill("Kai Keys");
   await page.getByLabel("Recipient 1 email").fill("kai@e2e.dev");
-  await page.getByRole("button", { name: "Save recipients" }).focus();
+  await page.getByRole("button", { name: "Save and continue" }).focus();
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("status").filter({ hasText: "Recipients saved" })).toBeVisible();
+  await expect(page).toHaveURL(/\/fields$/);
 
   await page.getByRole("button", { name: "Signature" }).focus();
   await page.keyboard.press("Enter");

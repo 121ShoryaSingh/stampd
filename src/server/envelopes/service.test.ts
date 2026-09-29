@@ -16,6 +16,7 @@ import {
   deleteDraft,
   voidEnvelope,
   uploadKeyFor,
+  renameDraft,
 } from "./service";
 
 const admin = adminDb();
@@ -44,6 +45,22 @@ describe("envelope drafts", () => {
     expect(envelope).toMatchObject({ title: "Lease", status: "draft" });
     const events = await withTenant(tenantId, (tx) => listAudit(tx, id));
     expect(events.map((e) => e.event)).toEqual(["created"]);
+  });
+
+  it("renames a draft, logging only real changes, and refuses once sent", async () => {
+    const { id } = await createEnvelope({ tenantId, userId, title: "Lease" });
+    await renameDraft({ tenantId, userId, envelopeId: id, title: "  Lease   for Flat 4 " });
+    await renameDraft({ tenantId, userId, envelopeId: id, title: "Lease for Flat 4" });
+    expect((await getEnvelope(tenantId, id)).envelope.title).toBe("Lease for Flat 4");
+    const events = await withTenant(tenantId, (tx) => listAudit(tx, id));
+    expect(events.map((e) => [e.event, e.data])).toEqual([
+      ["created", { title: "Lease" }],
+      ["renamed", { title: "Lease for Flat 4" }],
+    ]);
+    await expect(renameDraft({ tenantId, userId, envelopeId: id, title: " " })).rejects.toThrow(/title/i);
+    await expect(renameDraft({ tenantId: otherTenant, userId, envelopeId: id, title: "Mine" })).rejects.toThrow(/not found/i);
+    await admin.envelope.update({ where: { id }, data: { status: "sent" } });
+    await expect(renameDraft({ tenantId, userId, envelopeId: id, title: "Too late" })).rejects.toThrow(/already sent/);
   });
 
   it("rejects an empty title", async () => {

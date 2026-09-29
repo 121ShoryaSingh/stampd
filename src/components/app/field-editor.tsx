@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Calendar, CheckSquare, CircleDot, Crosshair, GripVertical, PenLine, Signature, TextCursorInput } from "lucide-react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { loadPdfjs } from "@/lib/pdfjs";
 import { PdfCanvas } from "@/components/pdf/pdf-canvas";
 import { Button } from "@/components/ui/button";
+import { useLeaveGuard } from "./leave-guard";
+import { WizardNav } from "./wizard-nav";
 import { clampBox, DEFAULT_FIELD_SIZE, type Box, type FieldKind } from "@/lib/fields/geometry";
 import { CHOICE_MARKS, DEFAULT_OPTIONS, MARK_LABELS, MAX_LABEL, MAX_OPTION, MAX_OPTIONS, OPTION_SIZE, type ChoiceMark } from "@/lib/fields/choice";
 import { pruneOrphanFields } from "@/lib/fields/prune";
@@ -65,7 +68,10 @@ export function FieldEditor(props: {
   recipients: Recipient[];
   initial: EditorField[];
   emptyText?: string;
+  // Wizard mode: big Back / "Save and continue" bar; continuing saves first.
+  wizard?: { back: { href: string; label: string }; next: string };
 }) {
+  const router = useRouter();
   const signers = props.recipients.filter((r) => r.role === "signer");
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [allFields, setAllFields] = useState<EditorField[]>(props.initial);
@@ -152,28 +158,7 @@ export function FieldEditor(props: {
     };
   }, [props.pdfUrl]);
 
-  // Warn before leaving with unsaved field changes.
-  useEffect(() => {
-    if (!dirty) return;
-    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty]);
-
-  // App Router links skip beforeunload, so confirm in-app navigation too.
-  useEffect(() => {
-    if (!dirty) return;
-    const onClick = (e: MouseEvent) => {
-      const link = (e.target as HTMLElement).closest("a[href]") as HTMLAnchorElement | null;
-      if (!link || link.target === "_blank" || e.defaultPrevented) return;
-      if (!confirm("You have unsaved field changes. Leave without saving?")) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    };
-    document.addEventListener("click", onClick, true);
-    return () => document.removeEventListener("click", onClick, true);
-  }, [dirty]);
+  const leaveDialog = useLeaveGuard(dirty, "field changes");
 
   // Keyboard: nudge, duplicate, delete, deselect.
   useEffect(() => {
@@ -291,9 +276,26 @@ export function FieldEditor(props: {
   async function save() {
     setMsg({});
     const res = await props.save(fields.map(({ key: _key, ...f }) => f));
-    if (res.error) return setMsg({ error: res.error });
+    if (res.error) {
+      setMsg({ error: res.error });
+      return false;
+    }
     setMsg({ ok: `Saved ${res.count} fields` });
     setDirty(false);
+    return true;
+  }
+
+  const [continuing, setContinuing] = useState(false);
+  // Wizard: save, then only move on once every signer can actually sign.
+  async function saveAndContinue() {
+    if (!props.wizard) return;
+    const missing = signers.filter((s) => !fields.some((f) => f.recipientId === s.id && f.type === "signature"));
+    if (missing.length > 0) return setMsg({ error: `Give ${missing.map((s) => s.name).join(", ")} a signature field before you continue` });
+    setContinuing(true);
+    // Nothing changed since the last save: just move on.
+    const ok = dirty ? await save() : true;
+    if (ok) router.push(props.wizard.next);
+    else setContinuing(false);
   }
 
   if (signers.length === 0) {
@@ -303,280 +305,302 @@ export function FieldEditor(props: {
   const minorPx = PAGE_W * GRID_STEP;
   // Bold lines stay put on the page (every 10% of its width), so zooming in shows more fine lines between them.
   const majorStep = BASE_GRID_STEP * GRID_MAJOR_EVERY;
+  const status = (
+    <>
+      {msg.error && <p role="alert" className="border-brutal bg-red p-2 text-sm font-bold text-ink">{msg.error}</p>}
+      {msg.ok && <p role="status" className="border-brutal bg-green p-2 text-sm font-bold">{msg.ok}</p>}
+    </>
+  );
   return (
-    <div className="grid grid-cols-[15rem_1fr] gap-6" onPointerMove={onMove} onPointerUp={onUp}>
-      <aside className="sticky top-4 h-fit space-y-4">
-        {signers.length <= PICKER_MAX ? (
-          // A few people: pick by clicking their color, which doubles as the legend.
-          <div>
-            <p id="assign-to" className="mb-1 font-mono text-xs font-bold uppercase">
-              Assign to
-            </p>
-            <div role="radiogroup" aria-labelledby="assign-to" className="grid gap-1">
-              {signers.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={assignee === s.id}
-                  onClick={() => setAssignee(s.id)}
-                  className={`border-brutal flex items-center gap-2 px-2 py-1.5 text-left text-sm font-bold ${assignee === s.id ? "shadow-hard-sm" : "bg-paper hover:bg-yellow/40"}`}
-                  style={assignee === s.id ? { background: color(s.id) } : undefined}
-                >
-                  <span aria-hidden className="border-brutal h-3 w-3 shrink-0" style={{ background: color(s.id) }} />
-                  <span className="min-w-0 truncate">{who(s)}</span>
-                  {assignee === s.id && <span className="ml-auto font-mono text-[10px] uppercase">new fields</span>}
-                </button>
-              ))}
+    <div className="space-y-6">
+      <div className="grid grid-cols-[15rem_1fr] gap-6" onPointerMove={onMove} onPointerUp={onUp}>
+        <aside className="sticky top-4 h-fit space-y-4">
+          {signers.length <= PICKER_MAX ? (
+            // A few people: pick by clicking their color, which doubles as the legend.
+            <div>
+              <p id="assign-to" className="mb-1 font-mono text-xs font-bold uppercase">
+                Assign to
+              </p>
+              <div role="radiogroup" aria-labelledby="assign-to" className="grid gap-1">
+                {signers.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={assignee === s.id}
+                    onClick={() => setAssignee(s.id)}
+                    className={`border-brutal flex items-center gap-2 px-2 py-1.5 text-left text-sm font-bold ${assignee === s.id ? "shadow-hard-sm" : "bg-paper hover:bg-yellow/40"}`}
+                    style={assignee === s.id ? { background: color(s.id) } : undefined}
+                  >
+                    <span aria-hidden className="border-brutal h-3 w-3 shrink-0" style={{ background: color(s.id) }} />
+                    <span className="min-w-0 truncate">{who(s)}</span>
+                    {assignee === s.id && <span className="ml-auto font-mono text-[10px] uppercase">new fields</span>}
+                  </button>
+                ))}
+              </div>
             </div>
+          ) : (
+            <>
+              <label className="block">
+                <span className="mb-1 block font-mono text-xs font-bold uppercase">Assign to</span>
+                <select value={assignee} onChange={(e) => setAssignee(e.target.value)} className="border-brutal w-full px-2 py-2 font-bold" style={{ background: color(assignee) }}>
+                  {signers.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {who(s)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <ul aria-label="Signer colors" className="space-y-1 text-sm">
+                {signers.map((s) => (
+                  <li key={s.id} className="flex items-center gap-2">
+                    <span aria-hidden className="border-brutal h-3 w-3" style={{ background: color(s.id) }} />
+                    {who(s)}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          <div className="grid gap-2">
+            {KINDS.map((k) => (
+              <button
+                key={k.type}
+                type="button"
+                aria-pressed={tool === k.type}
+                onPointerDown={(e) => startPaletteDrag(e, k.type)}
+                onClick={() => {
+                  if (justDropped.current) return void (justDropped.current = false);
+                  setTool(tool === k.type ? null : k.type);
+                }}
+                className={`border-brutal flex touch-none select-none items-center justify-between px-3 py-2 text-left font-bold ${tool === k.type ? "bg-ink text-paper" : "bg-paper hover:bg-yellow"}`}
+              >
+                <span className="flex items-center gap-2">
+                  <k.Icon aria-hidden className="h-4 w-4" />
+                  {k.label}
+                </span>
+                <GripVertical aria-hidden className="h-4 w-4 opacity-50" />
+              </button>
+            ))}
           </div>
-        ) : (
-          <>
-            <label className="block">
-              <span className="mb-1 block font-mono text-xs font-bold uppercase">Assign to</span>
-              <select value={assignee} onChange={(e) => setAssignee(e.target.value)} className="border-brutal w-full px-2 py-2 font-bold" style={{ background: color(assignee) }}>
+          {tool && (
+            <Button type="button" size="sm" className="w-full justify-center" icon={<Crosshair aria-hidden className="h-4 w-4" />} onClick={() => addField(tool, sel?.page ?? 1, 0.5, 0.5)}>
+              Place at center
+            </Button>
+          )}
+          <p className="font-mono text-xs">Drag a field onto the page, or pick one and click. Arrows nudge, Shift+arrows move 4 cells, Alt for fine moves, Ctrl+D duplicates, Delete removes. A choice question has one box per answer: drag each onto the document&apos;s own box or word.</p>
+          <div className="border-brutal space-y-1 p-2 font-mono text-xs font-bold uppercase">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={showGrid} onChange={(e) => setShowGrid(e.target.checked)} /> Show grid
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} /> Snap to grid
+            </label>
+            <label className="flex items-center justify-between gap-2">
+              Zoom
+              <select aria-label="Zoom" value={zoom} onChange={(e) => setZoom(Number(e.target.value))} className="border-brutal bg-paper px-1 py-0.5">
+                {ZOOMS.map((z) => (
+                  <option key={z} value={z}>
+                    {z}%
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          {sel && (
+            <div className="border-brutal space-y-2 bg-yellow/40 p-2" aria-label="Selected field">
+              <p className="font-mono text-xs font-bold uppercase">
+                {sel.groupKey ? `Question ${questionNo.get(sel.groupKey)} (${siblings(sel).length} answers)` : sel.type} - page {sel.page}
+              </p>
+              <select
+                aria-label="Field signer"
+                value={sel.recipientId}
+                onChange={(e) => (sel.groupKey ? updateQuestion(sel.groupKey, { recipientId: e.target.value }) : update(sel.key, { recipientId: e.target.value }))}
+                className="border-brutal w-full px-2 py-1"
+              >
                 {signers.map((s) => (
                   <option key={s.id} value={s.id}>
                     {who(s)}
                   </option>
                 ))}
               </select>
-            </label>
-            <ul aria-label="Signer colors" className="space-y-1 text-sm">
-              {signers.map((s) => (
-                <li key={s.id} className="flex items-center gap-2">
-                  <span aria-hidden className="border-brutal h-3 w-3" style={{ background: color(s.id) }} />
-                  {who(s)}
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-        <div className="grid gap-2">
-          {KINDS.map((k) => (
-            <button
-              key={k.type}
-              type="button"
-              aria-pressed={tool === k.type}
-              onPointerDown={(e) => startPaletteDrag(e, k.type)}
-              onClick={() => {
-                if (justDropped.current) return void (justDropped.current = false);
-                setTool(tool === k.type ? null : k.type);
-              }}
-              className={`border-brutal flex touch-none select-none items-center justify-between px-3 py-2 text-left font-bold ${tool === k.type ? "bg-ink text-paper" : "bg-paper hover:bg-yellow"}`}
-            >
-              <span className="flex items-center gap-2">
-                <k.Icon aria-hidden className="h-4 w-4" />
-                {k.label}
-              </span>
-              <GripVertical aria-hidden className="h-4 w-4 opacity-50" />
-            </button>
-          ))}
-        </div>
-        {tool && (
-          <Button type="button" size="sm" className="w-full justify-center" icon={<Crosshair aria-hidden className="h-4 w-4" />} onClick={() => addField(tool, sel?.page ?? 1, 0.5, 0.5)}>
-            Place at center
-          </Button>
-        )}
-        <p className="font-mono text-xs">Drag a field onto the page, or pick one and click. Arrows nudge, Shift+arrows move 4 cells, Alt for fine moves, Ctrl+D duplicates, Delete removes. A choice question has one box per answer: drag each onto the document&apos;s own box or word.</p>
-        <div className="border-brutal space-y-1 p-2 font-mono text-xs font-bold uppercase">
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={showGrid} onChange={(e) => setShowGrid(e.target.checked)} /> Show grid
-          </label>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} /> Snap to grid
-          </label>
-          <label className="flex items-center justify-between gap-2">
-            Zoom
-            <select aria-label="Zoom" value={zoom} onChange={(e) => setZoom(Number(e.target.value))} className="border-brutal bg-paper px-1 py-0.5">
-              {ZOOMS.map((z) => (
-                <option key={z} value={z}>
-                  {z}%
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        {sel && (
-          <div className="border-brutal space-y-2 bg-yellow/40 p-2" aria-label="Selected field">
-            <p className="font-mono text-xs font-bold uppercase">
-              {sel.groupKey ? `Question ${questionNo.get(sel.groupKey)} (${siblings(sel).length} answers)` : sel.type} - page {sel.page}
-            </p>
-            <select
-              aria-label="Field signer"
-              value={sel.recipientId}
-              onChange={(e) => (sel.groupKey ? updateQuestion(sel.groupKey, { recipientId: e.target.value }) : update(sel.key, { recipientId: e.target.value }))}
-              className="border-brutal w-full px-2 py-1"
-            >
-              {signers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {who(s)}
-                </option>
-              ))}
-            </select>
-            <label className="block">
-              <span className="mb-0.5 block font-mono text-[10px] font-bold uppercase">{sel.groupKey ? "Question" : "Label"}</span>
-              <input
-                aria-label={sel.groupKey ? "Question" : "Field label"}
-                value={sel.label ?? ""}
-                maxLength={MAX_LABEL}
-                placeholder={sel.groupKey ? "Enter question (optional)" : sel.type === "text" ? "Enter label, e.g. Company name" : "Enter label (optional)"}
-                onChange={(e) => (sel.groupKey ? updateQuestion(sel.groupKey, { label: e.target.value }) : update(sel.key, { label: e.target.value }))}
-                className="border-brutal w-full bg-paper px-2 py-1 text-sm"
-              />
-            </label>
-            {sel.groupKey && (
-              <>
-                <label className="block">
-                  <span className="mb-0.5 block font-mono text-[10px] font-bold uppercase">This answer</span>
-                  <input
-                    aria-label="Answer label"
-                    value={sel.option ?? ""}
-                    maxLength={MAX_OPTION}
-                    placeholder="Enter answer, e.g. Yes"
-                    onChange={(e) => update(sel.key, { option: e.target.value })}
-                    className="border-brutal w-full bg-paper px-2 py-1 text-sm"
-                  />
-                </label>
-                <label className="block">
-                  <span className="mb-0.5 block font-mono text-[10px] font-bold uppercase">Mark the chosen answer</span>
-                  <select
-                    aria-label="Mark the chosen answer"
-                    value={sel.mark ?? "check"}
-                    onChange={(e) => updateQuestion(sel.groupKey!, { mark: e.target.value as ChoiceMark })}
-                    className="border-brutal w-full bg-paper px-2 py-1 text-sm"
-                  >
-                    {CHOICE_MARKS.map((m) => (
-                      <option key={m} value={m}>
-                        {MARK_LABELS[m]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className="flex gap-2">
-                  <Button type="button" size="sm" className="flex-1 justify-center" disabled={siblings(sel).length >= MAX_OPTIONS} onClick={() => addOption(sel)}>
-                    Add answer
-                  </Button>
-                  <Button type="button" size="sm" className="flex-1 justify-center" disabled={siblings(sel).length <= 2} onClick={() => removeField(sel)}>
-                    Remove answer
-                  </Button>
-                </div>
-              </>
-            )}
-            {sel.type !== "date" && (
-              <label className="flex items-center gap-2 text-sm font-bold">
+              <label className="block">
+                <span className="mb-0.5 block font-mono text-[10px] font-bold uppercase">{sel.groupKey ? "Question" : "Label"}</span>
                 <input
-                  type="checkbox"
-                  checked={sel.required ?? sel.type !== "checkbox"}
-                  onChange={(e) => (sel.groupKey ? updateQuestion(sel.groupKey, { required: e.target.checked }) : update(sel.key, { required: e.target.checked }))}
-                />{" "}
-                Required
+                  aria-label={sel.groupKey ? "Question" : "Field label"}
+                  value={sel.label ?? ""}
+                  maxLength={MAX_LABEL}
+                  placeholder={sel.groupKey ? "Enter question (optional)" : sel.type === "text" ? "Enter label, e.g. Company name" : "Enter label (optional)"}
+                  onChange={(e) => (sel.groupKey ? updateQuestion(sel.groupKey, { label: e.target.value }) : update(sel.key, { label: e.target.value }))}
+                  className="border-brutal w-full bg-paper px-2 py-1 text-sm"
+                />
               </label>
-            )}
-            <Button
-              type="button"
-              className="w-full justify-center py-1"
-              onClick={() => (sel.groupKey ? (setFields((fs) => fs.filter((f) => f.groupKey !== sel.groupKey)), setSelected(null)) : removeField(sel))}
-            >
-              {sel.groupKey ? "Delete question" : "Delete field"}
-            </Button>
+              {sel.groupKey && (
+                <>
+                  <label className="block">
+                    <span className="mb-0.5 block font-mono text-[10px] font-bold uppercase">This answer</span>
+                    <input
+                      aria-label="Answer label"
+                      value={sel.option ?? ""}
+                      maxLength={MAX_OPTION}
+                      placeholder="Enter answer, e.g. Yes"
+                      onChange={(e) => update(sel.key, { option: e.target.value })}
+                      className="border-brutal w-full bg-paper px-2 py-1 text-sm"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-0.5 block font-mono text-[10px] font-bold uppercase">Mark the chosen answer</span>
+                    <select
+                      aria-label="Mark the chosen answer"
+                      value={sel.mark ?? "check"}
+                      onChange={(e) => updateQuestion(sel.groupKey!, { mark: e.target.value as ChoiceMark })}
+                      className="border-brutal w-full bg-paper px-2 py-1 text-sm"
+                    >
+                      {CHOICE_MARKS.map((m) => (
+                        <option key={m} value={m}>
+                          {MARK_LABELS[m]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="flex gap-2">
+                    <Button type="button" size="sm" className="flex-1 justify-center" disabled={siblings(sel).length >= MAX_OPTIONS} onClick={() => addOption(sel)}>
+                      Add answer
+                    </Button>
+                    <Button type="button" size="sm" className="flex-1 justify-center" disabled={siblings(sel).length <= 2} onClick={() => removeField(sel)}>
+                      Remove answer
+                    </Button>
+                  </div>
+                </>
+              )}
+              {sel.type !== "date" && (
+                <label className="flex items-center gap-2 text-sm font-bold">
+                  <input
+                    type="checkbox"
+                    checked={sel.required ?? sel.type !== "checkbox"}
+                    onChange={(e) => (sel.groupKey ? updateQuestion(sel.groupKey, { required: e.target.checked }) : update(sel.key, { required: e.target.checked }))}
+                  />{" "}
+                  Required
+                </label>
+              )}
+              <Button
+                type="button"
+                className="w-full justify-center py-1"
+                onClick={() => (sel.groupKey ? (setFields((fs) => fs.filter((f) => f.groupKey !== sel.groupKey)), setSelected(null)) : removeField(sel))}
+              >
+                {sel.groupKey ? "Delete question" : "Delete field"}
+              </Button>
+            </div>
+          )}
+          <Button variant="primary" type="button" onClick={save} className="w-full justify-center">
+            Save fields
+          </Button>
+          <p className={`font-mono text-xs font-bold ${dirty ? "text-red-ink" : ""}`}>{dirty ? "Unsaved changes" : "All changes saved"}</p>
+          {/* In the wizard the message sits by "Save and continue", where the eye is. */}
+          {!props.wizard && status}
+        </aside>
+
+        <div className="min-w-0 space-y-6 overflow-x-auto">
+          {!doc && <p className="font-mono">Loading PDF...</p>}
+          {doc &&
+            props.pageSizes.map((ps, i) => {
+              const page = i + 1;
+              const h = (ps.h / ps.w) * PAGE_W;
+              const g = guides.page === page ? guides.g : NO_GUIDES;
+              return (
+                <div
+                  key={page}
+                  data-page={page}
+                  data-testid={`page-${page}`}
+                  onClick={(e) => place(e, page)}
+                  className={`border-brutal shadow-hard relative bg-paper ${tool ? "cursor-crosshair" : ""}`}
+                  style={{ width: PAGE_W, height: h }}
+                >
+                  <PdfCanvas doc={doc} pageNumber={page} width={PAGE_W} />
+                  {showGrid && (
+                    <div
+                      className="pointer-events-none absolute inset-0"
+                      style={{
+                        backgroundImage: [
+                          "linear-gradient(to right, rgba(0,0,0,.22) 1px, transparent 1px)",
+                          "linear-gradient(to bottom, rgba(0,0,0,.22) 1px, transparent 1px)",
+                          "linear-gradient(to right, rgba(0,0,0,.07) 1px, transparent 1px)",
+                          "linear-gradient(to bottom, rgba(0,0,0,.07) 1px, transparent 1px)",
+                        ].join(","),
+                        backgroundSize: [
+                          `${PAGE_W * majorStep}px ${h * majorStep}px`,
+                          `${PAGE_W * majorStep}px ${h * majorStep}px`,
+                          `${minorPx}px ${h * GRID_STEP}px`,
+                          `${minorPx}px ${h * GRID_STEP}px`,
+                        ].join(","),
+                      }}
+                    />
+                  )}
+                  {g.v.map((x) => (
+                    <div key={`v${x}`} className="pointer-events-none absolute inset-y-0 border-l-2 border-dashed border-red" style={{ left: x * PAGE_W }} />
+                  ))}
+                  {g.h.map((y) => (
+                    <div key={`h${y}`} className="pointer-events-none absolute inset-x-0 border-t-2 border-dashed border-red" style={{ top: y * h }} />
+                  ))}
+                  {fields
+                    .filter((f) => f.page === page)
+                    .map((f) => (
+                      <div
+                        key={f.key}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={f.groupKey ? `question ${questionNo.get(f.groupKey)} answer ${f.option}` : `${f.type} field`}
+                        title={f.groupKey ? `Question ${questionNo.get(f.groupKey)}${f.label ? `: ${f.label}` : ""} - ${f.option}` : (f.label ?? undefined)}
+                        onPointerDown={(e) => startFieldDrag(e, f, "move")}
+                        onFocus={() => setSelected(f.key)}
+                        className={`absolute flex cursor-move touch-none select-none items-center border-2 border-ink px-1 font-mono text-[10px] font-bold uppercase ${selected === f.key ? "z-10 outline outline-2 outline-offset-2 outline-red" : sel?.groupKey && f.groupKey === sel.groupKey ? "z-10 outline-dashed outline-2 outline-offset-2 outline-red" : ""}`}
+                        style={{ left: f.x * PAGE_W, top: f.y * h, width: f.w * PAGE_W, height: f.h * h, background: color(f.recipientId) }}
+                      >
+                        {f.groupKey && (
+                          <span aria-hidden className="pointer-events-none absolute bottom-full left-0 mb-0.5 whitespace-nowrap bg-ink px-0.5 text-[9px] leading-tight text-paper">
+                            Q{questionNo.get(f.groupKey)} {f.option}
+                          </span>
+                        )}
+                        <span className="overflow-hidden whitespace-nowrap">{f.groupKey ? "" : f.label || f.type}</span>
+                        {selected === f.key &&
+                          HANDLES.map(({ h: hd, cls }) => (
+                            <span
+                              key={hd}
+                              aria-hidden
+                              onPointerDown={(e) => startFieldDrag(e, f, hd)}
+                              className={`absolute h-3 w-3 border-2 border-ink bg-paper ${cls}`}
+                            />
+                          ))}
+                      </div>
+                    ))}
+                </div>
+              );
+            })}
+        </div>
+
+        {ghost && (
+          <div
+            aria-hidden
+            className="border-brutal pointer-events-none fixed z-50 bg-yellow px-2 py-1 font-mono text-xs font-bold uppercase shadow-hard-sm"
+            style={{ left: ghost.x + 8, top: ghost.y + 8 }}
+          >
+            {ghost.type}
           </div>
         )}
-        <Button variant="primary" type="button" onClick={save} className="w-full justify-center">
-          Save fields
-        </Button>
-        <p className={`font-mono text-xs font-bold ${dirty ? "text-red-ink" : ""}`}>{dirty ? "Unsaved changes" : "All changes saved"}</p>
-        {msg.error && <p role="alert" className="border-brutal bg-red p-2 text-sm font-bold text-ink">{msg.error}</p>}
-        {msg.ok && <p role="status" className="border-brutal bg-green p-2 text-sm font-bold">{msg.ok}</p>}
-      </aside>
-
-      <div className="min-w-0 space-y-6 overflow-x-auto">
-        {!doc && <p className="font-mono">Loading PDF...</p>}
-        {doc &&
-          props.pageSizes.map((ps, i) => {
-            const page = i + 1;
-            const h = (ps.h / ps.w) * PAGE_W;
-            const g = guides.page === page ? guides.g : NO_GUIDES;
-            return (
-              <div
-                key={page}
-                data-page={page}
-                data-testid={`page-${page}`}
-                onClick={(e) => place(e, page)}
-                className={`border-brutal shadow-hard relative bg-paper ${tool ? "cursor-crosshair" : ""}`}
-                style={{ width: PAGE_W, height: h }}
-              >
-                <PdfCanvas doc={doc} pageNumber={page} width={PAGE_W} />
-                {showGrid && (
-                  <div
-                    className="pointer-events-none absolute inset-0"
-                    style={{
-                      backgroundImage: [
-                        "linear-gradient(to right, rgba(0,0,0,.22) 1px, transparent 1px)",
-                        "linear-gradient(to bottom, rgba(0,0,0,.22) 1px, transparent 1px)",
-                        "linear-gradient(to right, rgba(0,0,0,.07) 1px, transparent 1px)",
-                        "linear-gradient(to bottom, rgba(0,0,0,.07) 1px, transparent 1px)",
-                      ].join(","),
-                      backgroundSize: [
-                        `${PAGE_W * majorStep}px ${h * majorStep}px`,
-                        `${PAGE_W * majorStep}px ${h * majorStep}px`,
-                        `${minorPx}px ${h * GRID_STEP}px`,
-                        `${minorPx}px ${h * GRID_STEP}px`,
-                      ].join(","),
-                    }}
-                  />
-                )}
-                {g.v.map((x) => (
-                  <div key={`v${x}`} className="pointer-events-none absolute inset-y-0 border-l-2 border-dashed border-red" style={{ left: x * PAGE_W }} />
-                ))}
-                {g.h.map((y) => (
-                  <div key={`h${y}`} className="pointer-events-none absolute inset-x-0 border-t-2 border-dashed border-red" style={{ top: y * h }} />
-                ))}
-                {fields
-                  .filter((f) => f.page === page)
-                  .map((f) => (
-                    <div
-                      key={f.key}
-                      role="button"
-                      tabIndex={0}
-                      aria-label={f.groupKey ? `question ${questionNo.get(f.groupKey)} answer ${f.option}` : `${f.type} field`}
-                      title={f.groupKey ? `Question ${questionNo.get(f.groupKey)}${f.label ? `: ${f.label}` : ""} - ${f.option}` : (f.label ?? undefined)}
-                      onPointerDown={(e) => startFieldDrag(e, f, "move")}
-                      onFocus={() => setSelected(f.key)}
-                      className={`absolute flex cursor-move touch-none select-none items-center border-2 border-ink px-1 font-mono text-[10px] font-bold uppercase ${selected === f.key ? "z-10 outline outline-2 outline-offset-2 outline-red" : sel?.groupKey && f.groupKey === sel.groupKey ? "z-10 outline-dashed outline-2 outline-offset-2 outline-red" : ""}`}
-                      style={{ left: f.x * PAGE_W, top: f.y * h, width: f.w * PAGE_W, height: f.h * h, background: color(f.recipientId) }}
-                    >
-                      {f.groupKey && (
-                        <span aria-hidden className="pointer-events-none absolute bottom-full left-0 mb-0.5 whitespace-nowrap bg-ink px-0.5 text-[9px] leading-tight text-paper">
-                          Q{questionNo.get(f.groupKey)} {f.option}
-                        </span>
-                      )}
-                      <span className="overflow-hidden whitespace-nowrap">{f.groupKey ? "" : f.label || f.type}</span>
-                      {selected === f.key &&
-                        HANDLES.map(({ h: hd, cls }) => (
-                          <span
-                            key={hd}
-                            aria-hidden
-                            onPointerDown={(e) => startFieldDrag(e, f, hd)}
-                            className={`absolute h-3 w-3 border-2 border-ink bg-paper ${cls}`}
-                          />
-                        ))}
-                    </div>
-                  ))}
-              </div>
-            );
-          })}
       </div>
-
-      {ghost && (
-        <div
-          aria-hidden
-          className="border-brutal pointer-events-none fixed z-50 bg-yellow px-2 py-1 font-mono text-xs font-bold uppercase shadow-hard-sm"
-          style={{ left: ghost.x + 8, top: ghost.y + 8 }}
-        >
-          {ghost.type}
-        </div>
+      {props.wizard && (
+        <WizardNav
+          back={props.wizard.back}
+          next={
+            <div className="flex flex-wrap items-center gap-3">
+              {status}
+              <Button variant="primary" size="lg" type="button" loading={continuing} onClick={saveAndContinue}>
+                Save and continue
+              </Button>
+            </div>
+          }
+        />
       )}
+      {leaveDialog}
     </div>
   );
 }

@@ -8,5 +8,6 @@ import { TENANT_COOKIE } from "@/server/tenants/current";
 export async function logoutAction() {
   await auth.api.signOut({ headers: await headers() });
   (await cookies()).delete(TENANT_COOKIE);
-  redirect("/login");
+  // Back to the public landing page, which now shows "Log in" instead of the app.
+  redirect("/");
 }

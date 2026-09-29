@@ -40,7 +40,7 @@ test("two signers sign in order and the envelope completes", async ({ page, brow
     { name: "Ada First", email: "ada@e2e.dev" },
     { name: "Bo Second", email: "bo@e2e.dev" },
   ]);
-  const envelopeUrl = page.url();
+  const envelopeUrl = page.url().split("?")[0];
   // Step 2 has no link yet.
   await expect(page.getByText("Waiting for earlier steps")).toBeVisible();
 
@@ -107,7 +107,7 @@ test("a question's answer boxes go where the document shows them, and the signer
 test("a signer declines and the envelope closes for everyone", async ({ page, browser }) => {
   await signUpWithWorkspace(page, newUser("decliner"));
   const [link] = await createAndSend(page, "Declined Deal", [{ name: "Cy Nope", email: "cy@e2e.dev" }]);
-  const envelopeUrl = page.url();
+  const envelopeUrl = page.url().split("?")[0];
 
   const signer = await signerPage(browser, link);
   await enterCode(signer, "cy@e2e.dev");

@@ -2,17 +2,26 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { saveRecipientsAction } from "./actions";
+import { saveRecipientsAction } from "../_wizard/actions";
 import { ArrowDown, ArrowUp, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { WizardNav } from "@/components/app/wizard-nav";
+import { useLeaveGuard } from "@/components/app/leave-guard";
 
 type Row = { name: string; email: string; role: "signer" | "cc"; routingOrder: number };
 
-export function RecipientsForm({ envelopeId, initial }: { envelopeId: string; initial: Row[] }) {
+// Wizard step: edit the list, then "Save and continue" saves it and moves on to placing fields.
+export function RecipientsForm({ envelopeId, initial, back, next }: { envelopeId: string; initial: Row[]; back: { href: string; label: string }; next: string }) {
   const router = useRouter();
-  const [rows, setRows] = useState<Row[]>(initial.length ? initial : [{ name: "", email: "", role: "signer", routingOrder: 1 }]);
+  const [rows, setRowsRaw] = useState<Row[]>(initial.length ? initial : [{ name: "", email: "", role: "signer", routingOrder: 1 }]);
+  const [dirty, setDirty] = useState(false);
+  const setRows = (u: React.SetStateAction<Row[]>) => {
+    setRowsRaw(u);
+    setDirty(true);
+  };
   const [msg, setMsg] = useState<{ ok?: string; error?: string }>({});
   const [busy, setBusy] = useState(false);
+  const leaveDialog = useLeaveGuard(dirty, "recipient changes");
   // Swaps two rows and their signing order, so the list order matches who signs first.
   const move = (i: number, d: -1 | 1) =>
     setRows((rs) => {
@@ -24,13 +33,20 @@ export function RecipientsForm({ envelopeId, initial }: { envelopeId: string; in
     });
   const update = (i: number, patch: Partial<Row>) => setRows((r) => r.map((row, j) => (j === i ? { ...row, ...patch } : row)));
 
-  async function save() {
+  async function saveAndContinue() {
+    setMsg({});
+    if (!rows.some((r) => r.role === "signer")) return setMsg({ error: "Add at least one signer to continue" });
     setBusy(true);
+    // Nothing changed since the last save: just move on.
+    if (!dirty && initial.length > 0) return router.push(next);
     const res = await saveRecipientsAction(envelopeId, rows);
-    setBusy(false);
-    if (res.error) return setMsg({ error: res.error });
+    if (res.error) {
+      setBusy(false);
+      return setMsg({ error: res.error });
+    }
+    setDirty(false);
     setMsg({ ok: "Recipients saved" });
-    router.refresh();
+    router.push(next);
   }
 
   return (
@@ -73,16 +89,22 @@ export function RecipientsForm({ envelopeId, initial }: { envelopeId: string; in
         </div>
       ))}
       <p className="font-mono text-xs">Same order number = sign in parallel. Lower numbers sign first.</p>
-      <div className="flex gap-2">
-        <Button type="button" onClick={() => setRows((rs) => [...rs, { name: "", email: "", role: "signer", routingOrder: rs.length + 1 }])}>
-          Add recipient
-        </Button>
-        <Button type="button" variant="accent" onClick={save} disabled={busy}>
-          {busy ? "Saving..." : "Save recipients"}
-        </Button>
-      </div>
-      {msg.error && <p role="alert" className="border-brutal bg-red p-3 font-bold text-ink">{msg.error}</p>}
-      {msg.ok && <p role="status" className="border-brutal bg-green p-2 font-bold">{msg.ok}</p>}
+      <Button type="button" onClick={() => setRows((rs) => [...rs, { name: "", email: "", role: "signer", routingOrder: rs.length + 1 }])}>
+        Add recipient
+      </Button>
+      <WizardNav
+        back={back}
+        next={
+          <div className="flex flex-wrap items-center gap-3">
+            {msg.error && <p role="alert" className="border-brutal bg-red p-2 text-sm font-bold text-ink">{msg.error}</p>}
+            {msg.ok && <p role="status" className="border-brutal bg-green p-2 text-sm font-bold">{msg.ok}</p>}
+            <Button type="button" variant="primary" size="lg" loading={busy} onClick={saveAndContinue}>
+              Save and continue
+            </Button>
+          </div>
+        }
+      />
+      {leaveDialog}
     </div>
   );
 }

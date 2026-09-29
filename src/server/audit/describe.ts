@@ -1,6 +1,7 @@
 // Human wording for audit events; recipient events name the signer.
 const WORDS: Record<string, (who: string) => string> = {
   created: () => "Envelope created",
+  renamed: () => "Envelope renamed",
   created_from_preset: () => "Envelope created from a preset",
   document_uploaded: () => "PDF uploaded",
   recipients_updated: () => "Recipients updated",

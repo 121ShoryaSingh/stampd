@@ -8,6 +8,7 @@ import { NotFoundError } from "@/server/errors";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmSubmit } from "@/components/ui/confirm";
 import { PageHeader } from "@/components/ui/layout";
 import { FieldEditor } from "@/components/app/field-editor";
 import { archivePresetAction, duplicatePresetAction, restorePresetAction, savePresetFieldsAction } from "../actions";
@@ -53,7 +54,13 @@ export default async function PresetPage({ params }: { params: Promise<{ id: str
             </form>
             <form action={archived ? restorePresetAction : archivePresetAction}>
               <input type="hidden" name="presetId" value={id} />
-              <Button icon={archived ? <ArchiveRestore aria-hidden className="h-4 w-4" /> : <Archive aria-hidden className="h-4 w-4" />}>{archived ? "Restore" : "Archive"}</Button>
+              {archived ? (
+                <Button icon={<ArchiveRestore aria-hidden className="h-4 w-4" />}>Restore</Button>
+              ) : (
+                <ConfirmSubmit icon={<Archive aria-hidden className="h-4 w-4" />} confirm={{ title: "Archive this preset?", message: "It is hidden from new envelopes. Envelopes already made from it are not affected, and you can restore it later.", confirmLabel: "Archive" }}>
+                  Archive
+                </ConfirmSubmit>
+              )}
             </form>
           </>
         }

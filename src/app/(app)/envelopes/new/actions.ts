@@ -17,5 +17,5 @@ export async function createEnvelopeAction(_prev: { error?: string }, form: Form
     if (e instanceof DomainError) return { error: e.message };
     throw e;
   }
-  redirect(`/envelopes/${id}`);
+  redirect(`/envelopes/${id}/upload`);
 }

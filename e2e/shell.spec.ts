@@ -5,7 +5,9 @@ test("log out ends the session", async ({ page }) => {
   await signUpWithWorkspace(page, newUser("leaver"));
   await page.getByRole("button", { name: "Account menu" }).click();
   await page.getByRole("button", { name: "Log out" }).click();
-  await expect(page).toHaveURL(/\/login/);
+  // Logging out lands on the public landing page, signed out.
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("link", { name: /log in/i }).first()).toBeVisible();
   await page.goto("/dashboard");
   await expect(page).toHaveURL(/\/login/);
 });
