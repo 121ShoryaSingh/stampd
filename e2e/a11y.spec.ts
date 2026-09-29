@@ -63,7 +63,7 @@ test("every wizard step passes axe and fits a phone", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 800 });
   for (const step of ["details", "upload", "recipients", "review"]) {
     await page.goto(`${base}/${step}`);
-    await expect(page.getByText(/Step \d of 5:/)).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Envelope steps" }).getByText(/Step \d of 5:/)).toBeVisible();
     await noSideScroll(page, `${step} step`);
   }
 });

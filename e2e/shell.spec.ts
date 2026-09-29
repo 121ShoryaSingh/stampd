@@ -22,3 +22,21 @@ test("on a phone the menu button opens navigation", async ({ page }) => {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(0);
 });
+
+test("the sidebar collapses to icons, remembers it, and Ctrl+B toggles it", async ({ page }) => {
+  await signUpWithWorkspace(page, newUser("collapse"));
+  const trigger = page.locator('[data-sidebar="trigger"]');
+  await expect(trigger).toHaveAccessibleName("Collapse sidebar");
+  await expect(page.getByLabel("Workspace")).toBeVisible();
+  await trigger.click();
+  await expect(trigger).toHaveAccessibleName("Expand sidebar");
+  // Collapsed: icons only, still reachable by name.
+  await expect(page.getByLabel("Workspace")).toBeHidden();
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Team" }).click();
+  await expect(page).toHaveURL(/\/settings\/team/);
+  await page.reload();
+  await expect(trigger).toHaveAccessibleName("Expand sidebar");
+  await page.keyboard.press("Control+b");
+  await expect(trigger).toHaveAccessibleName("Collapse sidebar");
+  await expect(page.getByLabel("Workspace")).toBeVisible();
+});

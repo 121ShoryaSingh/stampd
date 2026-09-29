@@ -8,10 +8,11 @@ const NONE_DONE = Object.fromEntries(STEPS.map((s) => [s.key, false])) as Record
 
 // Page frame for every draft step: a big way back to the list, the title and the stepper.
 // Without an id (the envelope does not exist yet) the steps are shown but not linked.
-export function WizardShell({ id, title, current, done = NONE_DONE, children }: { id?: string; title: string; current: StepKey; done?: Record<StepKey, boolean>; children: ReactNode }) {
+// `wide` lets a step (the field editor) use the whole width, e.g. with the app sidebar collapsed.
+export function WizardShell({ id, title, current, done = NONE_DONE, wide = false, children }: { id?: string; title: string; current: StepKey; done?: Record<StepKey, boolean>; wide?: boolean; children: ReactNode }) {
   const at = STEPS.findIndex((s) => s.key === current);
   return (
-    <div className="max-w-6xl space-y-6">
+    <div className={`space-y-6 ${wide ? "" : "max-w-6xl"}`}>
       <ButtonLink href="/dashboard" size="lg" icon={<ArrowLeft aria-hidden className="h-5 w-5" />}>
         All envelopes
       </ButtonLink>

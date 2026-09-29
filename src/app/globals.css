@@ -37,6 +37,8 @@
   --border: #000000;
   --input: #000000;
   --ring: #ff3d00;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #000000;
 }
 
 @theme inline {
@@ -58,6 +60,8 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
   --radius-sm: 0px;
   --radius-md: 0px;
   --radius-lg: 0px;

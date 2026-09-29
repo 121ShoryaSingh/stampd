@@ -13,7 +13,7 @@ export default async function FieldsStep({ params }: { params: Promise<{ id: str
   const document = data.document!;
   const pdfUrl = await presignGet(document.s3Key, 3600);
   return (
-    <WizardShell id={id} title={data.envelope.title} current="fields" done={done}>
+    <WizardShell id={id} title={data.envelope.title} current="fields" done={done} wide>
       <Card>
         <h2 className="mb-1 font-display text-2xl">Place the fields</h2>
         <p className="mb-4">Every signer needs at least one signature field.</p>
