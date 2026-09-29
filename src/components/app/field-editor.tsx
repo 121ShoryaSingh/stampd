@@ -534,17 +534,21 @@ export function FieldEditor(props: {
                     <div
                       className="pointer-events-none absolute inset-0"
                       style={{
+                        // Cells are fixed fractions of the page, so they grow as you zoom in, just like the document.
+                        // Zoomed in, fainter snap lines split each cell for finer placement.
                         backgroundImage: [
-                          "linear-gradient(to right, rgba(0,0,0,.22) 1px, transparent 1px)",
-                          "linear-gradient(to bottom, rgba(0,0,0,.22) 1px, transparent 1px)",
-                          "linear-gradient(to right, rgba(0,0,0,.07) 1px, transparent 1px)",
-                          "linear-gradient(to bottom, rgba(0,0,0,.07) 1px, transparent 1px)",
+                          "linear-gradient(to right, rgba(0,0,0,.28) 1px, transparent 1px)",
+                          "linear-gradient(to bottom, rgba(0,0,0,.28) 1px, transparent 1px)",
+                          "linear-gradient(to right, rgba(0,0,0,.14) 1px, transparent 1px)",
+                          "linear-gradient(to bottom, rgba(0,0,0,.14) 1px, transparent 1px)",
+                          ...(GRID_STEP < BASE_GRID_STEP ? ["linear-gradient(to right, rgba(0,0,0,.06) 1px, transparent 1px)", "linear-gradient(to bottom, rgba(0,0,0,.06) 1px, transparent 1px)"] : []),
                         ].join(","),
                         backgroundSize: [
                           `${PAGE_W * majorStep}px ${h * majorStep}px`,
                           `${PAGE_W * majorStep}px ${h * majorStep}px`,
-                          `${minorPx}px ${h * GRID_STEP}px`,
-                          `${minorPx}px ${h * GRID_STEP}px`,
+                          `${PAGE_W * BASE_GRID_STEP}px ${h * BASE_GRID_STEP}px`,
+                          `${PAGE_W * BASE_GRID_STEP}px ${h * BASE_GRID_STEP}px`,
+                          ...(GRID_STEP < BASE_GRID_STEP ? [`${minorPx}px ${h * GRID_STEP}px`, `${minorPx}px ${h * GRID_STEP}px`] : []),
                         ].join(","),
                       }}
                     />
