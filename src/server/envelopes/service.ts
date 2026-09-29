@@ -26,7 +26,7 @@ export async function lockDraft(tx: Tx, envelopeId: string) {
   return env;
 }
 
-function cleanTitle(raw: string) {
+export function cleanTitle(raw: string) {
   const t = raw.trim().replace(/\s+/g, " ");
   if (t.length < 1 || t.length > 200) throw new ValidationError("Title must be between 1 and 200 characters");
   return t;
