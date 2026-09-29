@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { Calendar, CheckSquare, CircleDot, Crosshair, GripVertical, PenLine, Signature, TextCursorInput } from "lucide-react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { PdfCanvas } from "@/components/pdf/pdf-canvas";
-import { saveFieldsAction } from "./actions";
 import { Button } from "@/components/ui/button";
 import { clampBox, DEFAULT_FIELD_SIZE, type Box, type FieldKind } from "@/lib/fields/geometry";
 import { pruneOrphanFields } from "@/lib/fields/prune";
@@ -40,7 +39,17 @@ const ZOOMS = [75, 100, 125];
 const ALIGN_PX = 5;
 const NO_GUIDES: Guides = { v: [], h: [] };
 
-export function FieldEditor(props: { envelopeId: string; pdfUrl: string; pageSizes: PageSize[]; recipients: Recipient[]; initial: EditorField[] }) {
+export type SavedField = Omit<EditorField, "key">;
+
+// Shared by envelopes (people = recipients) and presets (people = roles).
+export function FieldEditor(props: {
+  save: (list: SavedField[]) => Promise<{ count?: number; error?: string }>;
+  pdfUrl: string;
+  pageSizes: PageSize[];
+  recipients: Recipient[];
+  initial: EditorField[];
+  emptyText?: string;
+}) {
   const signers = props.recipients.filter((r) => r.role === "signer");
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [allFields, setAllFields] = useState<EditorField[]>(props.initial);
@@ -209,17 +218,14 @@ export function FieldEditor(props: { envelopeId: string; pdfUrl: string; pageSiz
 
   async function save() {
     setMsg({});
-    const res = await saveFieldsAction(
-      props.envelopeId,
-      fields.map(({ key: _key, ...f }) => f),
-    );
+    const res = await props.save(fields.map(({ key: _key, ...f }) => f));
     if (res.error) return setMsg({ error: res.error });
     setMsg({ ok: `Saved ${res.count} fields` });
     setDirty(false);
   }
 
   if (signers.length === 0) {
-    return <p className="border-brutal bg-yellow p-4 font-bold">Add at least one signer above, then place their fields.</p>;
+    return <p className="border-brutal bg-yellow p-4 font-bold">{props.emptyText ?? "Add at least one signer above, then place their fields."}</p>;
   }
 
   const minorPx = PAGE_W * GRID_STEP;

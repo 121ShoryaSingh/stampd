@@ -6,7 +6,8 @@ import { presignGet } from "@/server/storage/storage";
 import { NotFoundError } from "@/server/errors";
 import { Card } from "@/components/ui/card";
 import { RecipientsForm } from "./recipients-form";
-import { FieldEditor } from "./editor";
+import { FieldEditor } from "@/components/app/field-editor";
+import { saveFieldsAction } from "./actions";
 
 export default async function EditPage({ params }: { params: Promise<{ id: string }> }) {
   const { tenant } = await requireTenant();
@@ -36,7 +37,7 @@ export default async function EditPage({ params }: { params: Promise<{ id: strin
       <Card>
         <h2 className="mb-4 font-display text-2xl">2. Place fields</h2>
         <FieldEditor
-          envelopeId={id}
+          save={saveFieldsAction.bind(null, id)}
           pdfUrl={pdfUrl}
           pageSizes={data.document.pageSizes}
           recipients={data.recipients.map((r) => ({ id: r.id, name: r.name, email: r.email, role: r.role }))}
