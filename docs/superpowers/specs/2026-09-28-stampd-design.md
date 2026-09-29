@@ -231,8 +231,9 @@ The final hash is printed on the certificate page.
   envelope detail (recipient timeline, audit list, download), team settings.
 - Signer screens: OTP, consent, guided field-by-field signing with a
   "next field" button, done screen. Mobile first.
-- Placeholder stats and reviews must be replaced with real data before
-  public launch (FTC and EU/UK consumer rules).
+- No invented stats, reviews, ratings or customer logos on marketing pages,
+  not even labelled as placeholders. Only true product facts; add social proof
+  only when real data exists.
 
 ## 9. Error handling
 
@@ -275,5 +276,5 @@ database). Local dev uses RustFS instead of MinIO.
 - Product name and domain.
 - CA-issued document-signing certificate (for "identity verified" in Adobe).
 - RFC 3161 timestamp authority choice (free TSA for v1, paid later).
-- Legal review of consent text and terms before launch.
+- Legal review of consent text, terms and the FAQ e-sign law answer before launch.
 - Plan 4 must require a verified email before a user can accept an invitation (found in Plan 1 review).

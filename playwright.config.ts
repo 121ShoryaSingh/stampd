@@ -3,6 +3,8 @@ import { selfSignedSealP12 } from "./src/server/finalize/dev-cert";
 
 // E2E gets its own server on 3101 backed by local RustFS, so tests never write to the real R2 bucket.
 const PORT = 3101;
+// Set E2E_BASE_URL to test against an already running server (Next allows one dev server per folder).
+const EXTERNAL = process.env.E2E_BASE_URL;
 const testEnv = {
   BETTER_AUTH_URL: `http://localhost:${PORT}`,
   S3_ENDPOINT: "http://localhost:9100",
@@ -30,24 +32,26 @@ export default defineConfig({
   workers: 2,
   expect: { timeout: 15_000 },
   globalSetup: "./e2e/global-setup.ts",
-  use: { baseURL: `http://localhost:${PORT}`, trace: "retain-on-failure" },
-  webServer: [
-    {
-      command: `npx next dev -p ${PORT}`,
-      url: `http://localhost:${PORT}`,
-      reuseExistingServer: false,
-      timeout: 120_000,
-      env: testEnv,
-    },
-    // Sends the emails the tests wait for. Stop any dev worker first: it would send e2e mail with dev links.
-    {
-      command: "npm run worker",
-      wait: { stdout: /worker started/ },
-      reuseExistingServer: false,
-      timeout: 60_000,
-      env: testEnv,
-    },
-  ],
+  use: { baseURL: EXTERNAL ?? `http://localhost:${PORT}`, trace: "retain-on-failure" },
+  webServer: EXTERNAL
+    ? undefined
+    : [
+        {
+          command: `npx next dev -p ${PORT}`,
+          url: `http://localhost:${PORT}`,
+          reuseExistingServer: false,
+          timeout: 120_000,
+          env: testEnv,
+        },
+        // Sends the emails the tests wait for. Stop any dev worker first: it would send e2e mail with dev links.
+        {
+          command: "npm run worker",
+          wait: { stdout: /worker started/ },
+          reuseExistingServer: false,
+          timeout: 60_000,
+          env: testEnv,
+        },
+      ],
 });
 
 export { testEnv };

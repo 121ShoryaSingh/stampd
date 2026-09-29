@@ -222,8 +222,8 @@ export function Landing({ signedIn }: { signedIn: boolean }) {
         });
       hover(".btn, nav a", null);
       hover("#cv", "DRAW");
-      hover(".rev", "REAL? NOT YET");
-      hover(".stat", "PLACEHOLDER");
+      hover(".rev", "RECORDED");
+      hover(".stat", "LIMIT");
       q(".doc.front, .step, .plan").forEach((n) => {
         on(n, "mousemove", ((e: MouseEvent) => {
           const r = n.getBoundingClientRect();
